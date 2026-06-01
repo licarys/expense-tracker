@@ -714,7 +714,7 @@
 <script>
 const CLIENT_ID = '96029ed9-a4f6-4eed-97e8-a5f1e2e58adc';
 const SCOPES = 'Files.ReadWrite offline_access';
-const REDIRECT_URI = 'https://licarys.github.io/expense-tracker/';
+const REDIRECT_URI = window.location.origin + window.location.pathname;
 
 const PROFILES = {
   personal: { label: 'Personal', emoji: '👤', defaultFile: 'expenses.xlsx' },
