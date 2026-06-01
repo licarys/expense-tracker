@@ -686,7 +686,7 @@
   <div class="panel" id="chat-panel">
     <div id="messages"></div>
     <div class="chat-input-wrap">
-      <textarea id="msg-input" placeholder="Lunch $12 food…" rows="1"></textarea>
+      <textarea id="msg-input" placeholder="Lunch $12, Cena €20, Uber MXN 80…" rows="1"></textarea>
       <button id="send-btn" onclick="handleSend()" aria-label="Send">➤</button>
     </div>
   </div>
@@ -1434,7 +1434,7 @@ function showApp() {
   }
 
   loadExpensesFromSheet();
-  addBotMessage("Hey! Ready to track your expenses 💸\n\nJust type something like:\n• Lunch with Ana $18 food\n• Netflix $15 entertainment\n• Uber to office $8 transport\n\nOr type summary to see your budget.");
+  addBotMessage("Hey! Ready to track your expenses 💸\n\nJust type something like:\n• Lunch with Ana $18 food\n• Netflix $15 entertainment\n• Uber to office $8 transport\n• Cena €20 food\n• Gasolina MXN 500 transport\n\nMultiple currencies supported — just include the symbol (€, £, ¥, R$…) or code (EUR, MXN, GBP…).\n\nOr type summary to see your budget.");
 }
 
 function updateGreeting() {
@@ -1670,7 +1670,7 @@ async function handleSend() {
     return;
   }
   if (lower === 'help') {
-    addBotMessage('Examples:\n• Lunch $12 food\n• Netflix $15 entertainment\n• Uber $8 transport\n• Gym $40 health\n\nOr type summary to see all budgets.');
+    addBotMessage('Examples:\n• Lunch $12 food\n• Netflix $15 entertainment\n• Uber $8 transport\n• Gym $40 health\n• Cena €20 food\n• Gasolina MXN 500 transport\n• Coffee £3.50 food\n\nMultiple currencies: use the symbol (€ £ ¥ R$…) or code (EUR MXN GBP…).\n\nOr type summary to see all budgets.');
     return;
   }
 

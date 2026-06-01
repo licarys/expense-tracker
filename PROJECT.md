@@ -100,6 +100,11 @@ One row per expense. Header row written on first use.
 - [ ] 401 handling — detect expired token mid-session and trigger refresh or re-login
 - [ ] Partner sharing link scope — currently uses `anonymous` edit link; evaluate whether `organization` scope is more appropriate
 - [ ] Monthly data scope — currently filters to current month only on load
+- [ ] **Pareja — quién pagó:** registrar qué persona pagó cada gasto (útil tanto para parejas como para usuarios individuales que quieran rastrear el pagador)
+- [ ] **Separar JS del HTML:** extraer el `<script>` a un archivo `app.js` independiente para mejorar mantenibilidad
+- [ ] **Búsqueda de categorías:** agregar un campo de búsqueda/filtro al selector de categorías, ya que la lista crece con categorías personalizadas
+- [ ] **Bug — fecha "Dec 1969":** algunas fechas se parsean incorrectamente como epoch 0; investigar y corregir el manejo de fechas en `loadExpensesFromSheet`
+- [ ] **Conversión de monedas:** al ingresar un gasto en moneda distinta a la predeterminada, la app debe convertirlo automáticamente usando un tipo de cambio (API externa o manual) y mostrarlo en la moneda base del perfil para que los presupuestos y totales sean comparables
 
 ---
 
