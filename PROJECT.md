@@ -21,7 +21,7 @@ Designed to live as a home screen shortcut on your phone so logging an expense t
 | Frontend | Single `index.html` (HTML/CSS/JS) | No build step, works as a static file |
 | Hosting | GitHub Pages | Free, permanent, no server needed |
 | Storage | Microsoft OneDrive via Excel | Already have a Microsoft 365 account |
-| Auth | Microsoft OAuth 2.0 (implicit flow) | No backend required |
+| Auth | Microsoft OAuth 2.0 — **PKCE flow** | Secure, no backend or client secret required |
 | API | Microsoft Graph API | Read/write Excel files in OneDrive |
 | Fonts | DM Sans + DM Mono (Google Fonts) | Clean, readable on mobile |
 
@@ -34,23 +34,28 @@ No npm. No framework. No backend. No paid services.
 - **App name:** expense-tracker
 - **Client ID:** `96029ed9-a4f6-4eed-97e8-a5f1e2e58adc`
 - **Account type:** Personal Microsoft accounts only
-- **Auth flow:** Single-page application (SPA), implicit token
-- **Redirect URI:** `https://licarys.github.io/expense-tracker`
+- **Auth flow:** Authorization Code + PKCE (implicit flow disabled)
+- **Redirect URI:** `https://licarys.github.io/expense-tracker/` ← trailing slash required
 - **Scopes:** `Files.ReadWrite offline_access`
+- **Public client:** Enabled (required for PKCE without a client secret)
 
 ---
 
-## Features (current MVP)
+## Features (current)
 
-- Microsoft sign-in — OAuth token stored in localStorage, persists across sessions
+- **Multi-profile support** — Personal and Pareja profiles, each with its own Microsoft account, tokens, settings, and OneDrive file
+- **Couple sharing** — Pareja owner generates an OneDrive sharing link; partner logs in with their own Microsoft account and uses the link to access the same shared file
+- **PKCE auth** — Secure OAuth 2.0 authorization code flow with PKCE; refresh tokens handled automatically
+- **Sign out** — Per-profile sign out from Settings; returns to profile selector
+- **Profile badge** — Visible in header, tap to switch profiles
 - Chat interface — type natural language to log expenses
 - Natural language parser — extracts description, amount, and category from free text (regex-based, local, no AI API)
-- Budget tracking — 6 default categories with configurable monthly limits
+- Budget tracking — 6 default categories with configurable monthly limits per profile
 - Progress bars — visual spending vs budget per category
 - Over-budget alerts — warning when a category exceeds its limit
 - Expense history — chronological list of all logged expenses
-- OneDrive sync — each expense saved as a row in `expenses.xlsx` in OneDrive root
-- Settings panel — adjust monthly budgets and Excel filename
+- OneDrive sync — each expense saved as a row in the profile's Excel file in OneDrive
+- Settings panel — adjust monthly budgets and Excel filename; partner link generator for couple owners
 - Mobile-first dark UI — safe area support, add-to-home-screen ready
 
 ---
@@ -72,7 +77,11 @@ All budgets are configurable in the settings panel and saved to localStorage.
 
 ## Excel file structure
 
-File: `expenses.xlsx` (OneDrive root, configurable)  
+| Profile | Default file | Location |
+|---|---|---|
+| Personal | `expenses.xlsx` | Owner's OneDrive root |
+| Pareja | `expenses-pareja.xlsx` | Owner's OneDrive root (partner accesses via sharing link) |
+
 Sheet: `Sheet1`
 
 | Column A | Column B | Column C | Column D |
@@ -85,11 +94,11 @@ One row per expense. Header row written on first use.
 
 ## Known issues / next steps
 
-- [ ] Token expiration not handled — 401 errors should redirect to sign-in
-- [ ] Header row check — only write headers if sheet is empty
+- [ ] Header row check — only write Date/Description/Amount/Category headers if the sheet is empty
 - [ ] Natural language parser needs improvement for edge cases (`"spent 20 on lunch"`, `"paid $8.5 uber"`)
 - [ ] Summary command in chat — formatted monthly breakdown
-- [ ] Test OneDrive read on session reload — verify expenses load correctly
+- [ ] 401 handling — detect expired token mid-session and trigger refresh or re-login
+- [ ] Partner sharing link scope — currently uses `anonymous` edit link; evaluate whether `organization` scope is more appropriate
 - [ ] Monthly data scope — currently filters to current month only on load
 
 ---
@@ -121,7 +130,10 @@ For local dev, add `http://localhost:8080` as an additional redirect URI in the 
 
 ## Roadmap
 
-### V1 (current — personal use)
+### V1 (current)
+- ✅ Multi-profile (Personal + Pareja)
+- ✅ PKCE auth with refresh tokens
+- ✅ Couple sharing via OneDrive sharing links
 - Stable OneDrive sync
 - Reliable natural language parsing
 - Monthly budget summaries in chat
@@ -135,29 +147,38 @@ For local dev, add `http://localhost:8080` as an additional redirect URI in the 
 
 ---
 
-## Claude Code prompt
+## Cursor / Claude Code prompt
 
-Use this to continue development in Claude Code. Attach `index.html` to the session.
+Use this to continue development. Attach `index.html` to the session.
 
 ```
 I'm building a personal expense tracker as a single HTML file deployed on GitHub Pages.
 
 Repo: https://github.com/licarys/expense-tracker
-Live: https://licarys.github.io/expense-tracker
+Live: https://licarys.github.io/expense-tracker/
 
 Stack: pure HTML/CSS/JS, Microsoft Graph API for OneDrive, no build tools, no framework.
-Auth: Microsoft OAuth implicit flow, client_id 96029ed9-a4f6-4eed-97e8-a5f1e2e58adc
-Storage: Excel file (expenses.xlsx) in OneDrive root via Microsoft Graph API
+Auth: Microsoft OAuth 2.0 — Authorization Code + PKCE flow (no implicit, no client secret)
+  Client ID: 96029ed9-a4f6-4eed-97e8-a5f1e2e58adc
+  Redirect URI: https://licarys.github.io/expense-tracker/
+  Scopes: Files.ReadWrite offline_access
+Storage: Excel files in OneDrive root via Microsoft Graph API
 UI: mobile-first dark theme, DM Sans + DM Mono fonts
+
+Profiles:
+- Personal: single Microsoft account, saves to expenses.xlsx
+- Pareja: 2 separate Microsoft accounts sharing a file
+  - Owner: logs in normally, generates OneDrive sharing link via Graph createLink API
+  - Partner: logs in with own account, enters sharing link, accesses file via /shares/{encoded} endpoint
+- All localStorage keys are namespaced per profile (e.g. et_token_personal, et_token_couple)
 
 The full current code is in the attached index.html.
 
 Pending tasks:
-1. Handle token expiration — detect 401 errors and redirect to sign-in
-2. Add header row check — only write Date/Description/Amount/Category headers if the sheet is empty
-3. Improve natural language parsing for edge cases like "spent 20 on lunch" or "paid $8.5 for uber"
-4. Fix summary command — show a clean formatted monthly breakdown in the chat
-5. Verify expense loading on session reload works correctly
+1. Header row check — only write Date/Description/Amount/Category headers if the sheet is empty
+2. Improve natural language parsing for edge cases like "spent 20 on lunch" or "paid $8.5 for uber"
+3. Summary command — show a clean formatted monthly breakdown in the chat
+4. 401 handling — detect expired token mid-session and trigger refresh or re-login
 
 Rules:
 - Single file only — keep everything in index.html
