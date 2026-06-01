@@ -234,6 +234,34 @@
   .hero-amount span { color: var(--muted); font-size: 24px; }
   .hero-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
+
+  .month-nav {
+    display: flex; align-items: center; gap: 6px; margin: 10px 0 4px;
+  }
+  .month-nav-btn {
+    background: transparent; border: 1px solid var(--border2);
+    border-radius: 8px; color: var(--text); font-size: 17px;
+    width: 30px; height: 30px; cursor: pointer; line-height: 1;
+    transition: border-color 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .month-nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .month-nav-btn:disabled { opacity: 0.3; cursor: default; }
+  .month-nav-label {
+    font-size: 13px; font-family: var(--font-mono); color: var(--text);
+    flex: 1; text-align: center; letter-spacing: 0.04em;
+  }
+  .sync-btn {
+    background: transparent; border: 1px solid var(--border2);
+    border-radius: 8px; color: var(--muted); font-size: 15px;
+    width: 30px; height: 30px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .sync-btn:hover { color: var(--accent); border-color: var(--accent); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .sync-btn.spinning { animation: spin 0.8s linear infinite; }
+
   .budget-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
   .budget-row {
     background: var(--surface);
@@ -631,10 +659,17 @@
   <!-- OVERVIEW PANEL -->
   <div class="panel active" id="overview-panel">
     <div class="overview-hero">
-      <div class="hero-label">Total spent this month</div>
+      <div class="hero-label">Total spent</div>
+      <div class="month-nav">
+        <button class="month-nav-btn" onclick="prevMonth()" title="Previous month">‹</button>
+        <span class="month-nav-label" id="hero-month-nav"></span>
+        <button class="month-nav-btn" id="next-month-btn" onclick="nextMonth()" title="Next month">›</button>
+        <button class="sync-btn" id="sync-btn" onclick="syncFromOneDrive()" title="Sync from OneDrive">↻</button>
+      </div>
       <div class="hero-amount"><span>$</span><span id="hero-total">0.00</span></div>
-      <div class="hero-sub" id="hero-sub">Loading budget…</div>
+      <div class="hero-sub" id="hero-sub">Loading…</div>
     </div>
+    <div id="overview-sync-status" style="text-align:center;font-size:11px;font-family:var(--font-mono);color:var(--muted);padding:0 20px 4px;min-height:16px"></div>
     <div class="budget-list" id="budget-list"></div>
   </div>
 
@@ -727,6 +762,37 @@ let coupleShareUrl = null;   // raw OneDrive share URL (partner only)
 let sharedFileHandle = null; // { driveId, itemId } resolved from share URL
 let accessToken = null;
 let expenses = [];
+let selectedMonth = new Date().getMonth();
+let selectedYear  = new Date().getFullYear();
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function prevMonth() {
+  selectedMonth--;
+  if (selectedMonth < 0) { selectedMonth = 11; selectedYear--; }
+  renderOverview();
+  renderLog();
+}
+
+function nextMonth() {
+  const now = new Date();
+  if (selectedYear === now.getFullYear() && selectedMonth === now.getMonth()) return;
+  selectedMonth++;
+  if (selectedMonth > 11) { selectedMonth = 0; selectedYear++; }
+  renderOverview();
+  renderLog();
+}
+
+async function syncFromOneDrive() {
+  const btn = document.getElementById('sync-btn');
+  if (!btn) return;
+  btn.classList.add('spinning');
+  btn.disabled = true;
+  await loadExpensesFromSheet();
+  btn.classList.remove('spinning');
+  btn.disabled = false;
+}
+
 
 // Namespace all storage keys by profile
 function sk(key) { return `${key}_${currentProfile}`; }
@@ -1232,16 +1298,23 @@ function parseExpense(text) {
 }
 
 function renderOverview() {
-  const now = new Date();
   const monthExpenses = expenses.filter(e => {
     const d = new Date(e.date);
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
   });
   CATEGORIES.forEach(c => {
     c.spent = monthExpenses.filter(e => e.category === c.key).reduce((s, e) => s + e.amount, 0);
   });
   const total = CATEGORIES.reduce((s, c) => s + c.spent, 0);
   const totalBudget = CATEGORIES.reduce((s, c) => s + c.budget, 0);
+  const navLabel = document.getElementById('hero-month-nav');
+  if (navLabel) navLabel.textContent = `${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
+  const nextBtn = document.getElementById('next-month-btn');
+  if (nextBtn) {
+    const now = new Date();
+    nextBtn.disabled = selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
+  }
+
   document.getElementById('hero-total').textContent = total.toFixed(2);
   document.getElementById('hero-sub').textContent = `$${(totalBudget - total).toFixed(2)} remaining of $${totalBudget} budget`;
 
@@ -1272,11 +1345,15 @@ function renderOverview() {
 
 function renderLog() {
   const list = document.getElementById('log-list');
-  if (expenses.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div>No expenses logged yet.<br>Go to "Log expense" to add your first one.</div>`;
+  const monthExpenses = expenses.filter(e => {
+    const d = new Date(e.date);
+    return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+  });
+  if (monthExpenses.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div>No expenses for ${MONTH_NAMES[selectedMonth]} ${selectedYear}.</div>`;
     return;
   }
-  const sorted = [...expenses].sort((a,b) => new Date(b.date) - new Date(a.date));
+  const sorted = [...monthExpenses].sort((a,b) => new Date(b.date) - new Date(a.date));
   list.innerHTML = '';
   sorted.forEach(e => {
     const cat = CATEGORIES.find(c => c.key === e.category) || CATEGORIES[5];
