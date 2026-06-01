@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterShellExecution": [
+      {
+        "command": ".cursor/hooks/update-plan.sh",
+        "matcher": "git (commit|push)"
+      }
+    ]
+  }
+}
