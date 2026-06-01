@@ -1035,6 +1035,27 @@ const CAT_KEYWORDS = {
 };
 
 function loadSettings() {
+  // Reset to defaults so profiles don't bleed into each other
+  CATEGORIES = [
+    { key:'food',          name:'Food',          emoji:'🥗', budget:300, spent:0, isDefault:true },
+    { key:'transport',     name:'Transport',      emoji:'🚗', budget:150, spent:0, isDefault:true },
+    { key:'entertainment', name:'Entertainment',  emoji:'🎬', budget:100, spent:0, isDefault:true },
+    { key:'health',        name:'Health',         emoji:'❤️',  budget:200, spent:0, isDefault:true },
+    { key:'shopping',      name:'Shopping',       emoji:'🛍️', budget:250, spent:0, isDefault:true },
+    { key:'other',         name:'Other',          emoji:'📦', budget:100, spent:0, isDefault:true },
+  ];
+
+  // Load global custom categories (shared across all sessions)
+  const savedCustom = localStorage.getItem('et_custom_categories');
+  if (savedCustom) {
+    JSON.parse(savedCustom).forEach(c => {
+      if (!CATEGORIES.find(x => x.key === c.key)) {
+        CATEGORIES.push({ ...c, spent: 0 });
+        CAT_KEYWORDS[c.key] = [c.name.toLowerCase()];
+      }
+    });
+  }
+
   const defaultFile = (PROFILES[currentProfile] || PROFILES.personal).defaultFile;
   document.getElementById('setting-filename').value = defaultFile;
   const saved = localStorage.getItem(sk('et_settings'));
@@ -1042,14 +1063,6 @@ function loadSettings() {
     const s = JSON.parse(saved);
     if (s.budgets) CATEGORIES.forEach(c => { if (s.budgets[c.key]) c.budget = s.budgets[c.key]; });
     if (s.filename) document.getElementById('setting-filename').value = s.filename;
-    if (s.customCategories) {
-      s.customCategories.forEach(c => {
-        if (!CATEGORIES.find(x => x.key === c.key)) {
-          CATEGORIES.push({ ...c, spent: 0 });
-          CAT_KEYWORDS[c.key] = [c.name.toLowerCase()];
-        }
-      });
-    }
   }
 }
 
@@ -1061,8 +1074,17 @@ function saveSettings() {
   });
   const defaultFile = (PROFILES[currentProfile] || PROFILES.personal).defaultFile;
   const filename = document.getElementById('setting-filename').value || defaultFile;
+
+  // Save custom categories globally (shared across all sessions)
   const customCategories = CATEGORIES.filter(c => !c.isDefault).map(({ key, name, emoji, budget }) => ({ key, name, emoji, budget }));
-  localStorage.setItem(sk('et_settings'), JSON.stringify({ budgets, filename, customCategories }));
+  localStorage.setItem('et_custom_categories', JSON.stringify(customCategories));
+
+  // Save budgets and filename per-profile
+  localStorage.setItem(sk('et_settings'), JSON.stringify({ budgets, filename }));
+
+  // Persist all categories + budgets to OneDrive sheet (source of truth across devices)
+  saveCategoriesToSheet();
+
   renderOverview();
   document.getElementById('sync-status').textContent = '✓ Settings saved';
   document.getElementById('sync-status').className = 'sync-status ok';
@@ -1121,8 +1143,39 @@ function confirmAddCategory() {
 function removeCategory(key) {
   CATEGORIES = CATEGORIES.filter(c => c.key !== key);
   delete CAT_KEYWORDS[key];
-  saveSettings();
+  // Update localStorage custom categories
+  const lsCustom = CATEGORIES.filter(c => !c.isDefault).map(({ key: k, name, emoji, budget }) => ({ key: k, name, emoji, budget }));
+  localStorage.setItem('et_custom_categories', JSON.stringify(lsCustom));
+  // Persist to OneDrive sheet
+  saveCategoriesToSheet();
   renderCatSettings();
+}
+
+// If a category name/key from the spreadsheet is unknown, auto-register it
+// so the expense retains its original category instead of falling to "Other".
+function resolveOrCreateCategory(name) {
+  if (!name) return CATEGORIES[5];
+  const lower = name.toLowerCase();
+  // Match by name or key (case-insensitive)
+  const existing = CATEGORIES.find(c =>
+    c.name.toLowerCase() === lower || c.key.toLowerCase() === lower
+  );
+  if (existing) return existing;
+
+  // Auto-create a new global category for the unknown name
+  const key = 'custom_' + lower.replace(/\s+/g, '_');
+  const newCat = { key, name: name.charAt(0).toUpperCase() + name.slice(1), emoji: '🏷️', budget: 0, spent: 0, isDefault: false };
+  CATEGORIES.push(newCat);
+  CAT_KEYWORDS[key] = [lower];
+
+  // Persist globally so it survives page reloads and other sessions
+  const existing_custom = JSON.parse(localStorage.getItem('et_custom_categories') || '[]');
+  if (!existing_custom.find(c => c.key === key)) {
+    existing_custom.push({ key: newCat.key, name: newCat.name, emoji: newCat.emoji, budget: newCat.budget });
+    localStorage.setItem('et_custom_categories', JSON.stringify(existing_custom));
+  }
+
+  return newCat;
 }
 
 // ── PKCE helpers ────────────────────────────────────────────────────────────
@@ -1263,6 +1316,17 @@ function showApp() {
   if (cached) {
     try {
       expenses = JSON.parse(cached);
+      // Jump to most recent month with data if current month is empty
+      const hasData = expenses.some(e => {
+        const d = new Date(e.date);
+        return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+      });
+      if (!hasData && expenses.length > 0) {
+        const latest = expenses.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b);
+        const d = new Date(latest.date);
+        selectedMonth = d.getMonth();
+        selectedYear  = d.getFullYear();
+      }
       renderOverview();
       renderLog();
     } catch(e) { /* ignore corrupt cache */ }
@@ -1608,12 +1672,127 @@ function setOverviewSyncStatus(msg, isErr) {
   el.style.color = isErr ? 'var(--danger)' : 'var(--muted)';
 }
 
+// ── Categories sheet (OneDrive) ──────────────────────────────────────────────
+
+// Returns true if the Categories sheet existed and was loaded, false if it was missing.
+// Source of truth for budget only — spent is always computed from Sheet1 expenses.
+async function loadCategoriesFromSheet() {
+  if (!accessToken) return false;
+  try {
+    const wbBase = await getWorkbookBase();
+    if (!wbBase) return false;
+    const authHeader = { 'Authorization': 'Bearer ' + accessToken };
+
+    const res = await fetch(`${wbBase}/worksheets/Categories/usedRange`, { headers: authHeader });
+    if (!res.ok) return false; // Sheet doesn't exist yet
+
+    const data = await res.json();
+    const rows = (data.values || []).slice(1); // Skip header row
+
+    rows.forEach(r => {
+      const name   = (r[0] || '').toString().trim();
+      const emoji  = (r[1] || '🏷️').toString().trim();
+      const budget = parseFloat(r[2]) || 0;
+      // Columns D (Spent) and E (Left) are informational only — never read back into app
+      if (!name) return;
+
+      const existing = CATEGORIES.find(c => c.name.toLowerCase() === name.toLowerCase());
+      if (existing) {
+        existing.budget = budget;
+        existing.emoji  = emoji;
+      } else {
+        // New custom category found in sheet — register it
+        const key = 'custom_' + name.toLowerCase().replace(/\s+/g, '_');
+        CATEGORIES.push({ key, name, emoji, budget, spent: 0, isDefault: false });
+        CAT_KEYWORDS[key] = [name.toLowerCase()];
+        // Keep localStorage custom list in sync
+        const lsCustom = JSON.parse(localStorage.getItem('et_custom_categories') || '[]');
+        if (!lsCustom.find(c => c.key === key)) {
+          lsCustom.push({ key, name, emoji, budget });
+          localStorage.setItem('et_custom_categories', JSON.stringify(lsCustom));
+        }
+      }
+    });
+
+    // Cache budgets in localStorage so they survive cold starts before the next sync
+    const budgets = {};
+    CATEGORIES.forEach(c => { budgets[c.key] = c.budget; });
+    const lsSettings = JSON.parse(localStorage.getItem(sk('et_settings')) || '{}');
+    localStorage.setItem(sk('et_settings'), JSON.stringify({ ...lsSettings, budgets }));
+
+    return true;
+  } catch(e) {
+    console.error('loadCategoriesFromSheet error:', e);
+    return false;
+  }
+}
+
+async function saveCategoriesToSheet() {
+  if (!accessToken) return;
+  try {
+    const wbBase = await getWorkbookBase();
+    if (!wbBase) return;
+    const authHeader = { 'Authorization': 'Bearer ' + accessToken };
+
+    // Create the Categories sheet only if it doesn't exist yet — never delete it.
+    const sheetCheck = await fetch(`${wbBase}/worksheets/Categories`, { headers: authHeader });
+    if (!sheetCheck.ok) {
+      const createRes = await fetch(`${wbBase}/worksheets/add`, {
+        method: 'POST',
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Categories' })
+      });
+      if (!createRes.ok) {
+        console.error('Could not create Categories sheet:', await createRes.text());
+        return;
+      }
+    }
+
+    // Write Name, Emoji, Budget as static values.
+    // Spent and Remaining use Excel SUMIF formulas that read live from Sheet1 —
+    // so any edits to Sheet1 (add/delete rows) are reflected instantly without re-sync.
+    const formulas = [['Name', 'Emoji', 'Budget', 'Spent', 'Remaining']];
+    CATEGORIES.forEach((c, i) => {
+      const row = i + 2; // Row 1 is the header
+      formulas.push([
+        c.name,
+        c.emoji,
+        c.budget,
+        `=SUMIF(Sheet1!D:D,A${row},Sheet1!C:C)`,
+        `=C${row}-D${row}`
+      ]);
+    });
+
+    // Pad with blank rows to erase stale data from previous writes
+    const totalRows = Math.max(formulas.length + 10, 30);
+    while (formulas.length < totalRows) formulas.push(['', '', '', '', '']);
+
+    const range = `A1:E${totalRows}`;
+    const patchRes = await fetch(`${wbBase}/worksheets/Categories/range(address='${range}')`, {
+      method: 'PATCH',
+      headers: { ...authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ formulas })
+    });
+    if (!patchRes.ok) {
+      console.error('Categories sheet write failed:', await patchRes.text());
+    }
+  } catch(e) {
+    console.error('saveCategoriesToSheet error:', e);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function loadExpensesFromSheet() {
   if (!accessToken) return;
   setOverviewSyncStatus('Syncing from OneDrive…');
   try {
     const wbBase = await getWorkbookBase();
     if (!wbBase) { setOverviewSyncStatus('⚠ Could not reach OneDrive', true); return; }
+
+    // Load budgets from Categories sheet (source of truth). Spent is computed below from Sheet1.
+    await loadCategoriesFromSheet();
+    renderCatSettings();
 
     const res = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`,
       { headers: { 'Authorization': 'Bearer ' + accessToken } }
@@ -1632,14 +1811,32 @@ async function loadExpensesFromSheet() {
     const rows = data.values || [];
     expenses = rows.slice(1).filter(r => r[0] && r[2]).map(r => {
       const d = new Date(r[0]);
-      const catObj = CATEGORIES.find(c => c.name.toLowerCase() === (r[3]||'').toLowerCase()) || CATEGORIES[5];
+      const catObj = resolveOrCreateCategory(r[3] || '');
       return { date: d.toISOString(), description: r[1] || '', amount: parseFloat(r[2]) || 0, category: catObj.key };
     });
+
     localStorage.setItem(sk('et_expenses_cache'), JSON.stringify(expenses));
-    const now = new Date();
-    setOverviewSyncStatus(`Synced · ${now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`);
+
+    // If the currently selected month has no expenses, jump to the most recent month
+    // that does — so the user always sees their actual data, not an empty month.
+    const currentMonthHasData = expenses.some(e => {
+      const d = new Date(e.date);
+      return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+    });
+    if (!currentMonthHasData && expenses.length > 0) {
+      const latest = expenses.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b);
+      const d = new Date(latest.date);
+      selectedMonth = d.getMonth();
+      selectedYear  = d.getFullYear();
+    }
+
     renderOverview();
     renderLog();
+
+    // Persist categories with updated Spent/Left to the sheet.
+    // Awaited so the sync status updates only after the write completes.
+    await saveCategoriesToSheet();
+    setOverviewSyncStatus(`Synced · ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`);
   } catch(e) {
     console.error('Load error:', e);
     setOverviewSyncStatus('⚠ Sync failed — check your connection', true);
