@@ -546,22 +546,110 @@ function closeSettings() {
   document.getElementById('settings-modal').classList.remove('open');
 }
 
-function signIn() {
-  const url = `https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_mode=fragment`;
-  window.location.href = url;
+// ── PKCE helpers ────────────────────────────────────────────────────────────
+function _b64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+function _generateVerifier() {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return _b64url(arr.buffer);
+}
+async function _generateChallenge(verifier) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return _b64url(digest);
+}
+// ────────────────────────────────────────────────────────────────────────────
+
+async function signIn() {
+  const verifier = _generateVerifier();
+  const challenge = await _generateChallenge(verifier);
+  sessionStorage.setItem('pkce_verifier', verifier);
+  const url = new URL('https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize');
+  url.searchParams.set('client_id', CLIENT_ID);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('redirect_uri', REDIRECT_URI);
+  url.searchParams.set('scope', SCOPES);
+  url.searchParams.set('response_mode', 'query');
+  url.searchParams.set('code_challenge', challenge);
+  url.searchParams.set('code_challenge_method', 'S256');
+  window.location.href = url.toString();
 }
 
-function handleAuth() {
-  const hash = window.location.hash.substring(1);
-  const params = new URLSearchParams(hash);
-  if (params.get('access_token')) {
-    accessToken = params.get('access_token');
+async function _exchangeCode(code) {
+  const verifier = sessionStorage.getItem('pkce_verifier');
+  sessionStorage.removeItem('pkce_verifier');
+  const res = await fetch('https://login.microsoftonline.com/consumers/oauth2/v2.0/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: CLIENT_ID,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: REDIRECT_URI,
+      code_verifier: verifier,
+    }),
+  });
+  return res.json();
+}
+
+async function _refreshAccessToken() {
+  const refreshToken = localStorage.getItem('et_refresh_token');
+  if (!refreshToken) return false;
+  const res = await fetch('https://login.microsoftonline.com/consumers/oauth2/v2.0/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: CLIENT_ID,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      scope: SCOPES,
+    }),
+  });
+  const data = await res.json();
+  if (data.access_token) {
+    accessToken = data.access_token;
     localStorage.setItem('et_token', accessToken);
+    if (data.refresh_token) localStorage.setItem('et_refresh_token', data.refresh_token);
+    const expiry = Date.now() + (data.expires_in || 3600) * 1000;
+    localStorage.setItem('et_token_expiry', expiry);
+    return true;
+  }
+  return false;
+}
+
+async function handleAuth() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if (code) {
     window.history.replaceState({}, '', window.location.pathname);
-    showApp();
-  } else {
-    const stored = localStorage.getItem('et_token');
-    if (stored) { accessToken = stored; showApp(); }
+    const data = await _exchangeCode(code);
+    if (data.access_token) {
+      accessToken = data.access_token;
+      localStorage.setItem('et_token', accessToken);
+      if (data.refresh_token) localStorage.setItem('et_refresh_token', data.refresh_token);
+      const expiry = Date.now() + (data.expires_in || 3600) * 1000;
+      localStorage.setItem('et_token_expiry', expiry);
+      showApp();
+    } else {
+      console.error('Token exchange failed:', data);
+    }
+    return;
+  }
+  const stored = localStorage.getItem('et_token');
+  const expiry = parseInt(localStorage.getItem('et_token_expiry') || '0');
+  if (stored) {
+    if (expiry && Date.now() > expiry) {
+      const refreshed = await _refreshAccessToken();
+      if (refreshed) { showApp(); return; }
+      localStorage.removeItem('et_token');
+      localStorage.removeItem('et_refresh_token');
+      localStorage.removeItem('et_token_expiry');
+    } else {
+      accessToken = stored;
+      showApp();
+    }
   }
 }
 
