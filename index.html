@@ -1293,21 +1293,34 @@ async function handleSend() {
   addBotMessage('Got it!', parsed, alertMsg, saved);
 }
 
+// Minimal valid empty xlsx workbook (base64). Used when creating the file for the first time.
+const EMPTY_XLSX_B64 = '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';
+
+function base64ToBlob(b64, mime) {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
 async function saveExpenseToSheet(expense) {
   if (!accessToken) return false;
   try {
-    // For owner/personal: ensure file exists before writing
+    const authHeader = { 'Authorization': 'Bearer ' + accessToken };
+
+    // For owner/personal: ensure a valid xlsx file exists before writing
     if (coupleRole !== 'partner') {
       const defaultFile = (PROFILES[currentProfile] || PROFILES.personal).defaultFile;
       const filename = document.getElementById('setting-filename').value || defaultFile;
-      const headers = { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' };
-      const check = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`, { headers });
+      const check = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`, { headers: authHeader });
       if (!check.ok) {
-        await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/content`, {
+        const xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        const createRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/content`, {
           method: 'PUT',
-          headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
-          body: new Blob([''], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+          headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': xlsxMime },
+          body: base64ToBlob(EMPTY_XLSX_B64, xlsxMime)
         });
+        if (!createRes.ok) { console.error('File create failed', await createRes.text()); return false; }
       }
     }
 
@@ -1316,13 +1329,29 @@ async function saveExpenseToSheet(expense) {
 
     const cat = CATEGORIES.find(c => c.key === expense.category) || CATEGORIES[5];
     const dateStr = new Date(expense.date).toLocaleDateString('en-US');
-    const authHeader = { 'Authorization': 'Bearer ' + accessToken };
 
     const rangeRes = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`, { headers: authHeader });
     let nextRow = 2;
+    let needsHeader = true;
+
     if (rangeRes.ok) {
       const rangeData = await rangeRes.json();
-      nextRow = (rangeData.rowCount || 1) + 1;
+      const rowCount = rangeData.rowCount || 0;
+      const firstVal = ((rangeData.values || [])[0] || [])[0];
+      if (rowCount > 0 && firstVal === 'Date') {
+        needsHeader = false;
+        nextRow = rowCount + 1;
+      }
+    }
+
+    if (needsHeader) {
+      const hRes = await fetch(`${wbBase}/worksheets/Sheet1/range(address='A1:D1')`, {
+        method: 'PATCH',
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [['Date', 'Description', 'Amount', 'Category']] })
+      });
+      if (!hRes.ok) { console.error('Header write failed', await hRes.text()); return false; }
+      nextRow = 2;
     }
 
     const updateRes = await fetch(
@@ -1333,6 +1362,7 @@ async function saveExpenseToSheet(expense) {
         body: JSON.stringify({ values: [[dateStr, expense.description, expense.amount, cat.name]] })
       }
     );
+    if (!updateRes.ok) console.error('Row write failed', await updateRes.text());
     return updateRes.ok;
   } catch (e) {
     console.error('Sheet save error:', e);
