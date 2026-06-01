@@ -234,7 +234,6 @@
   .hero-amount span { color: var(--muted); font-size: 24px; }
   .hero-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
-
   .month-nav {
     display: flex; align-items: center; gap: 6px; margin: 10px 0 4px;
   }
@@ -793,7 +792,6 @@ async function syncFromOneDrive() {
   btn.disabled = false;
 }
 
-
 // Namespace all storage keys by profile
 function sk(key) { return `${key}_${currentProfile}`; }
 
@@ -1318,6 +1316,7 @@ function renderOverview() {
   });
   const total = CATEGORIES.reduce((s, c) => s + c.spent, 0);
   const totalBudget = CATEGORIES.reduce((s, c) => s + c.budget, 0);
+
   const navLabel = document.getElementById('hero-month-nav');
   if (navLabel) navLabel.textContent = `${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
   const nextBtn = document.getElementById('next-month-btn');
@@ -1409,10 +1408,16 @@ function addBotMessage(text, expenseData, alertMsg, saved) {
     alert.innerHTML = `⚠️ ${alertMsg}`;
     wrapper.appendChild(alert);
   }
-  if (saved) {
+  if (saved === true) {
     const badge = document.createElement('div');
     badge.className = 'saved-badge';
     badge.innerHTML = `✓ Saved to OneDrive`;
+    wrapper.appendChild(badge);
+  } else if (saved === false) {
+    const badge = document.createElement('div');
+    badge.className = 'saved-badge';
+    badge.style.cssText = 'background:var(--danger-dim);border-color:var(--danger);color:var(--danger)';
+    badge.innerHTML = `⚠ Not saved to OneDrive — check console for details`;
     wrapper.appendChild(badge);
   }
   msgs.appendChild(wrapper);
@@ -1596,30 +1601,49 @@ async function saveExpenseToSheet(expense) {
   }
 }
 
+function setOverviewSyncStatus(msg, isErr) {
+  const el = document.getElementById('overview-sync-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isErr ? 'var(--danger)' : 'var(--muted)';
+}
+
 async function loadExpensesFromSheet() {
   if (!accessToken) return;
+  setOverviewSyncStatus('Syncing from OneDrive…');
   try {
     const wbBase = await getWorkbookBase();
-    if (!wbBase) return;
+    if (!wbBase) { setOverviewSyncStatus('⚠ Could not reach OneDrive', true); return; }
 
     const res = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`,
       { headers: { 'Authorization': 'Bearer ' + accessToken } }
     );
-    if (!res.ok) return;
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const code = errData?.error?.code || '';
+      if (res.status === 404 || code === 'ItemNotFound') {
+        setOverviewSyncStatus('No data in OneDrive yet — log your first expense!');
+      } else {
+        setOverviewSyncStatus(`⚠ OneDrive error ${res.status}: ${errData?.error?.message || res.statusText}`, true);
+      }
+      return;
+    }
     const data = await res.json();
     const rows = data.values || [];
-    const now = new Date();
     expenses = rows.slice(1).filter(r => r[0] && r[2]).map(r => {
       const d = new Date(r[0]);
       const catObj = CATEGORIES.find(c => c.name.toLowerCase() === (r[3]||'').toLowerCase()) || CATEGORIES[5];
       return { date: d.toISOString(), description: r[1] || '', amount: parseFloat(r[2]) || 0, category: catObj.key };
-    }).filter(e => {
-      const d = new Date(e.date);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
+    localStorage.setItem(sk('et_expenses_cache'), JSON.stringify(expenses));
+    const now = new Date();
+    setOverviewSyncStatus(`Synced · ${now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`);
     renderOverview();
     renderLog();
-  } catch(e) { console.error('Load error:', e); }
+  } catch(e) {
+    console.error('Load error:', e);
+    setOverviewSyncStatus('⚠ Sync failed — check your connection', true);
+  }
 }
 
 document.getElementById('msg-input').addEventListener('keydown', e => {
