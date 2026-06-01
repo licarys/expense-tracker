@@ -41,6 +41,95 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 
+  /* PROFILE SELECTOR SCREEN */
+  #profile-screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    gap: 2rem;
+  }
+  .profile-cards { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+  .profile-card {
+    width: 100%;
+    padding: 20px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+  }
+  .profile-card:hover { background: var(--surface2); border-color: var(--accent); }
+  .profile-card.has-session { border-color: rgba(200,245,96,0.3); }
+  .profile-card.has-session::after {
+    content: '●';
+    position: absolute;
+    top: 12px; right: 14px;
+    font-size: 10px;
+    color: var(--accent);
+  }
+  .profile-card-emoji { font-size: 30px; line-height: 1; }
+  .profile-card-info { display: flex; flex-direction: column; gap: 2px; }
+  .profile-card-name { font-size: 17px; font-weight: 500; color: var(--text); text-align: left; }
+  .profile-card-sub { font-size: 13px; color: var(--muted); text-align: left; }
+
+  /* profile badge in header */
+  .profile-badge {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 10px 4px 7px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    font-size: 12px; font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .profile-badge:hover { border-color: var(--accent); }
+  .profile-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+  /* COUPLE SETUP SCREEN */
+  #couple-setup-screen {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    gap: 2rem;
+  }
+  .couple-link-input {
+    width: 100%;
+    padding: 13px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .couple-link-input:focus { border-color: var(--accent); }
+  .couple-link-input::placeholder { color: var(--muted); }
+  .share-link-box {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    word-break: break-all;
+    line-height: 1.5;
+  }
+
   /* AUTH SCREEN */
   #auth-screen {
     flex: 1;
@@ -397,19 +486,88 @@
 </head>
 <body>
 
-<!-- AUTH SCREEN -->
-<div id="auth-screen">
+<!-- PROFILE SELECTOR SCREEN -->
+<div id="profile-screen">
   <div class="auth-logo">💸</div>
   <div>
     <h1 class="auth-title">Expense Tracker</h1>
-    <p class="auth-sub" style="margin-top:8px">Log expenses in seconds.<br>Saved directly to your OneDrive.</p>
+    <p class="auth-sub" style="margin-top:8px">Choose your space</p>
+  </div>
+  <div class="profile-cards">
+    <button class="profile-card" id="profile-card-personal" onclick="selectProfile('personal')">
+      <span class="profile-card-emoji">👤</span>
+      <div class="profile-card-info">
+        <span class="profile-card-name">Personal</span>
+        <span class="profile-card-sub">Your own expenses</span>
+      </div>
+    </button>
+    <button class="profile-card" id="profile-card-couple" onclick="selectProfile('couple')">
+      <span class="profile-card-emoji">💑</span>
+      <div class="profile-card-info">
+        <span class="profile-card-name">Pareja</span>
+        <span class="profile-card-sub">Shared expenses</span>
+      </div>
+    </button>
+  </div>
+</div>
+
+<!-- COUPLE SETUP SCREEN -->
+<div id="couple-setup-screen">
+
+  <!-- Step 1: role selection -->
+  <div id="couple-step-role" style="display:flex;flex-direction:column;align-items:center;gap:2rem;width:100%">
+    <div class="auth-logo">💑</div>
+    <div>
+      <h1 class="auth-title">Pareja Setup</h1>
+      <p class="auth-sub" style="margin-top:8px">¿Cómo vas a usar este perfil?</p>
+    </div>
+    <div class="profile-cards">
+      <button class="profile-card" onclick="preSelectCoupleRole('owner')">
+        <span class="profile-card-emoji">👑</span>
+        <div class="profile-card-info">
+          <span class="profile-card-name">Soy el propietario</span>
+          <span class="profile-card-sub">El archivo vive en mi OneDrive</span>
+        </div>
+      </button>
+      <button class="profile-card" onclick="preSelectCoupleRole('partner')">
+        <span class="profile-card-emoji">🔗</span>
+        <div class="profile-card-info">
+          <span class="profile-card-name">Tengo el link de mi pareja</span>
+          <span class="profile-card-sub">Accedo al archivo compartido</span>
+        </div>
+      </button>
+    </div>
+    <button onclick="switchProfile()" style="background:transparent;border:none;color:var(--muted);font-family:var(--font-sans);font-size:13px;cursor:pointer;padding:0;">← Cambiar perfil</button>
+  </div>
+
+  <!-- Step 2: partner link input -->
+  <div id="couple-step-link" style="display:none;flex-direction:column;align-items:center;gap:1.5rem;width:100%">
+    <div class="auth-logo">🔗</div>
+    <div>
+      <h1 class="auth-title">Link de tu pareja</h1>
+      <p class="auth-sub" style="margin-top:8px">Pega el link que tu pareja generó<br>desde su app (Settings → Partner link)</p>
+    </div>
+    <input id="couple-link-input" class="couple-link-input" type="url" placeholder="https://1drv.ms/…" />
+    <p id="couple-link-error" style="color:var(--danger);font-size:12px;text-align:center;margin-top:-8px;min-height:16px"></p>
+    <button class="auth-btn" onclick="confirmCouplePartnerLink()">Continuar →</button>
+    <button onclick="preSelectCoupleRole(null)" style="background:transparent;border:none;color:var(--muted);font-family:var(--font-sans);font-size:13px;cursor:pointer;padding:0;">← Atrás</button>
+  </div>
+
+</div>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen" style="display:none">
+  <div class="auth-logo" id="auth-logo">💸</div>
+  <div>
+    <h1 class="auth-title">Expense Tracker</h1>
+    <p class="auth-sub" id="auth-profile-sub" style="margin-top:8px">Log expenses in seconds.<br>Saved directly to your OneDrive.</p>
   </div>
   <button class="auth-btn" onclick="signIn()">
     Sign in with Microsoft
   </button>
-  <p style="font-size:12px; color:var(--muted); text-align:center; line-height:1.6">
-    Your data stays in your OneDrive.<br>No servers. No subscriptions.
-  </p>
+  <button onclick="switchProfile()" style="background:transparent;border:none;color:var(--muted);font-family:var(--font-sans);font-size:13px;cursor:pointer;padding:0;">
+    ← Change profile
+  </button>
 </div>
 
 <!-- APP SCREEN -->
@@ -420,6 +578,10 @@
       <span class="header-month" id="header-month">May 2025</span>
     </div>
     <div class="header-right">
+      <div class="profile-badge" onclick="switchProfile()" id="profile-badge" title="Switch profile">
+        <div class="profile-badge-dot"></div>
+        <span id="profile-badge-label">Personal</span>
+      </div>
       <div class="icon-btn" onclick="openSettings()" title="Settings">⚙️</div>
     </div>
   </header>
@@ -471,6 +633,21 @@
       <input class="setting-input" id="setting-filename" value="expenses.xlsx" placeholder="expenses.xlsx">
     </div>
 
+    <!-- Couple sharing section (only shown for couple profile) -->
+    <div id="couple-share-section" style="display:none">
+      <div class="modal-title" style="margin-top:8px">Partner link</div>
+      <div id="couple-owner-section" style="display:none">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5">Genera un link para que tu pareja acceda al mismo archivo desde su cuenta de Microsoft.</p>
+        <div id="share-link-display" class="share-link-box" style="display:none"></div>
+        <button onclick="generateSharingLink()" id="gen-link-btn" style="width:100%;padding:13px;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;color:var(--text);font-family:var(--font-sans);font-size:14px;cursor:pointer;margin-top:10px;">Generate partner link</button>
+        <button onclick="copyShareLink()" id="copy-link-btn" style="display:none;width:100%;padding:13px;background:var(--accent-dim);border:1px solid var(--accent);border-radius:12px;color:var(--accent);font-family:var(--font-sans);font-size:14px;cursor:pointer;margin-top:8px;">Copy link</button>
+      </div>
+      <div id="couple-partner-section" style="display:none">
+        <p style="font-size:13px;color:var(--accent);margin-bottom:6px">✓ Conectado al archivo de tu pareja</p>
+        <button onclick="disconnectPartner()" style="width:100%;padding:11px;background:transparent;border:1px solid var(--danger);border-radius:12px;color:var(--danger);font-family:var(--font-sans);font-size:13px;cursor:pointer;margin-top:6px;">Disconnect</button>
+      </div>
+    </div>
+
     <div class="modal-title" style="margin-top:8px">Monthly budgets</div>
     <div class="cat-settings" id="cat-settings"></div>
 
@@ -478,6 +655,7 @@
     <div class="sync-status" id="sync-status"></div>
 
     <button onclick="closeSettings()" style="width:100%;padding:13px;background:transparent;border:1px solid var(--border);border-radius:12px;color:var(--muted);font-family:var(--font-sans);font-size:14px;cursor:pointer;margin-top:10px;">Close</button>
+    <button onclick="signOut()" style="width:100%;padding:13px;background:transparent;border:1px solid var(--danger);border-radius:12px;color:var(--danger);font-family:var(--font-sans);font-size:14px;cursor:pointer;margin-top:8px;">Sign out</button>
   </div>
 </div>
 
@@ -486,8 +664,241 @@ const CLIENT_ID = '96029ed9-a4f6-4eed-97e8-a5f1e2e58adc';
 const SCOPES = 'Files.ReadWrite offline_access';
 const REDIRECT_URI = 'https://licarys.github.io/expense-tracker/';
 
+const PROFILES = {
+  personal: { label: 'Personal', emoji: '👤', defaultFile: 'expenses.xlsx' },
+  couple:   { label: 'Pareja',   emoji: '💑', defaultFile: 'expenses-pareja.xlsx' },
+};
+
+let currentProfile = null;
+let coupleRole = null;       // 'owner' | 'partner' (only for couple profile)
+let coupleShareUrl = null;   // raw OneDrive share URL (partner only)
+let sharedFileHandle = null; // { driveId, itemId } resolved from share URL
 let accessToken = null;
 let expenses = [];
+
+// Namespace all storage keys by profile
+function sk(key) { return `${key}_${currentProfile}`; }
+
+function selectProfile(profile) {
+  currentProfile = profile;
+  sessionStorage.setItem('et_active_profile', profile);
+
+  // Mark cards with active session indicator
+  Object.keys(PROFILES).forEach(p => {
+    const card = document.getElementById('profile-card-' + p);
+    if (card) card.classList.toggle('has-session', !!localStorage.getItem(`et_token_${p}`));
+  });
+
+  document.getElementById('profile-screen').style.display = 'none';
+
+  // Update profile badge and auth screen
+  const info = PROFILES[profile];
+  document.getElementById('profile-badge-label').textContent = info.label;
+  document.getElementById('auth-logo').textContent = info.emoji;
+  document.getElementById('auth-profile-sub').innerHTML =
+    `Signing in for <strong>${info.label}</strong>.<br>Data saved to your OneDrive.`;
+
+  if (profile === 'couple') {
+    const savedRole = localStorage.getItem(sk('et_couple_role'));
+    if (savedRole) {
+      coupleRole = savedRole;
+      if (savedRole === 'partner') {
+        coupleShareUrl = localStorage.getItem(sk('et_couple_share_url'));
+        const savedHandle = localStorage.getItem(sk('et_shared_handle'));
+        if (savedHandle) sharedFileHandle = JSON.parse(savedHandle);
+      }
+      handleAuth();
+      return;
+    }
+    // No role saved → show couple setup
+    document.getElementById('couple-setup-screen').style.display = 'flex';
+    return;
+  }
+
+  coupleRole = null;
+  handleAuth();
+}
+
+function switchProfile() {
+  accessToken = null;
+  coupleRole = null;
+  coupleShareUrl = null;
+  sharedFileHandle = null;
+  currentProfile = null;
+  sessionStorage.removeItem('et_active_profile');
+  expenses = [];
+
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('couple-setup-screen').style.display = 'none';
+
+  // Reset couple setup to step 1
+  document.getElementById('couple-step-role').style.display = 'flex';
+  document.getElementById('couple-step-link').style.display = 'none';
+
+  // Refresh session indicators on cards
+  Object.keys(PROFILES).forEach(p => {
+    const card = document.getElementById('profile-card-' + p);
+    if (card) card.classList.toggle('has-session', !!localStorage.getItem(`et_token_${p}`));
+  });
+
+  document.getElementById('profile-screen').style.display = 'flex';
+}
+
+function signOut() {
+  if (!currentProfile) return;
+  localStorage.removeItem(sk('et_token'));
+  localStorage.removeItem(sk('et_refresh_token'));
+  localStorage.removeItem(sk('et_token_expiry'));
+  localStorage.removeItem(sk('et_couple_role'));
+  localStorage.removeItem(sk('et_couple_share_url'));
+  localStorage.removeItem(sk('et_shared_handle'));
+  accessToken = null;
+  coupleRole = null;
+  coupleShareUrl = null;
+  sharedFileHandle = null;
+  expenses = [];
+  closeSettings();
+  switchProfile();
+}
+
+// ── Couple setup ─────────────────────────────────────────────────────────────
+function preSelectCoupleRole(role) {
+  if (role === null) {
+    document.getElementById('couple-step-link').style.display = 'none';
+    document.getElementById('couple-step-role').style.display = 'flex';
+    return;
+  }
+  if (role === 'partner') {
+    document.getElementById('couple-step-role').style.display = 'none';
+    document.getElementById('couple-step-link').style.display = 'flex';
+    return;
+  }
+  // owner: save role and go straight to auth
+  coupleRole = 'owner';
+  localStorage.setItem(sk('et_couple_role'), 'owner');
+  document.getElementById('couple-setup-screen').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+function confirmCouplePartnerLink() {
+  const input = document.getElementById('couple-link-input');
+  const errorEl = document.getElementById('couple-link-error');
+  const link = input.value.trim();
+  if (!link || !link.startsWith('http')) {
+    errorEl.textContent = 'Please enter a valid link.';
+    return;
+  }
+  errorEl.textContent = '';
+  coupleShareUrl = link;
+  coupleRole = 'partner';
+  localStorage.setItem(sk('et_couple_role'), 'partner');
+  localStorage.setItem(sk('et_couple_share_url'), link);
+  document.getElementById('couple-setup-screen').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+function disconnectPartner() {
+  localStorage.removeItem(sk('et_couple_role'));
+  localStorage.removeItem(sk('et_couple_share_url'));
+  localStorage.removeItem(sk('et_shared_handle'));
+  coupleRole = null;
+  coupleShareUrl = null;
+  sharedFileHandle = null;
+  closeSettings();
+  switchProfile();
+}
+
+// ── Sharing link (owner generates, partner uses) ─────────────────────────────
+let _currentShareLink = null;
+
+async function generateSharingLink() {
+  const btn = document.getElementById('gen-link-btn');
+  btn.textContent = 'Generating…';
+  btn.disabled = true;
+  try {
+    const defaultFile = PROFILES.couple.defaultFile;
+    const filename = document.getElementById('setting-filename').value || defaultFile;
+    const headers = { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' };
+
+    // Ensure file exists first
+    const check = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`, { headers });
+    let itemId;
+    if (check.ok) {
+      itemId = (await check.json()).id;
+    } else {
+      await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/content`, {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+        body: new Blob([''], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      });
+      const newFile = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`, { headers });
+      itemId = (await newFile.json()).id;
+    }
+
+    const linkRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${itemId}/createLink`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ type: 'edit', scope: 'anonymous' }),
+    });
+    const linkData = await linkRes.json();
+    _currentShareLink = linkData.link?.webUrl;
+
+    if (_currentShareLink) {
+      const display = document.getElementById('share-link-display');
+      display.textContent = _currentShareLink;
+      display.style.display = 'block';
+      document.getElementById('copy-link-btn').style.display = 'block';
+      btn.textContent = 'Regenerate link';
+    } else {
+      btn.textContent = 'Error — retry';
+    }
+  } catch(e) {
+    btn.textContent = 'Error — retry';
+    console.error(e);
+  }
+  btn.disabled = false;
+}
+
+function copyShareLink() {
+  if (!_currentShareLink) return;
+  navigator.clipboard.writeText(_currentShareLink).then(() => {
+    const btn = document.getElementById('copy-link-btn');
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => { btn.textContent = 'Copy link'; }, 2000);
+  });
+}
+
+// Resolve an OneDrive share URL → { driveId, itemId }
+async function resolveSharedFile(shareUrl) {
+  try {
+    const encoded = 'u!' + btoa(shareUrl).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    const res = await fetch(`https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`, {
+      headers: { 'Authorization': 'Bearer ' + accessToken }
+    });
+    if (!res.ok) return null;
+    const item = await res.json();
+    return { driveId: item.parentReference.driveId, itemId: item.id };
+  } catch(e) {
+    console.error('resolveSharedFile error:', e);
+    return null;
+  }
+}
+
+// Returns the Graph API workbook base URL for the current profile/role
+async function getWorkbookBase() {
+  if (coupleRole === 'partner' && coupleShareUrl) {
+    if (!sharedFileHandle) {
+      sharedFileHandle = await resolveSharedFile(coupleShareUrl);
+      if (sharedFileHandle) localStorage.setItem(sk('et_shared_handle'), JSON.stringify(sharedFileHandle));
+    }
+    if (!sharedFileHandle) return null;
+    return `https://graph.microsoft.com/v1.0/drives/${sharedFileHandle.driveId}/items/${sharedFileHandle.itemId}/workbook`;
+  }
+  const filename = document.getElementById('setting-filename').value ||
+    (PROFILES[currentProfile] || PROFILES.personal).defaultFile;
+  return `https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/workbook`;
+}
 
 const CATEGORIES = [
   { key:'food',          name:'Food',          emoji:'🥗', budget:300, spent:0 },
@@ -507,7 +918,9 @@ const CAT_KEYWORDS = {
 };
 
 function loadSettings() {
-  const saved = localStorage.getItem('et_settings');
+  const defaultFile = (PROFILES[currentProfile] || PROFILES.personal).defaultFile;
+  document.getElementById('setting-filename').value = defaultFile;
+  const saved = localStorage.getItem(sk('et_settings'));
   if (saved) {
     const s = JSON.parse(saved);
     if (s.budgets) CATEGORIES.forEach(c => { if (s.budgets[c.key]) c.budget = s.budgets[c.key]; });
@@ -521,8 +934,9 @@ function saveSettings() {
     const inp = document.getElementById('cat-budget-' + c.key);
     if (inp) { c.budget = parseFloat(inp.value) || c.budget; budgets[c.key] = c.budget; }
   });
-  const filename = document.getElementById('setting-filename').value || 'expenses.xlsx';
-  localStorage.setItem('et_settings', JSON.stringify({ budgets, filename }));
+  const defaultFile = (PROFILES[currentProfile] || PROFILES.personal).defaultFile;
+  const filename = document.getElementById('setting-filename').value || defaultFile;
+  localStorage.setItem(sk('et_settings'), JSON.stringify({ budgets, filename }));
   renderOverview();
   document.getElementById('sync-status').textContent = '✓ Settings saved';
   document.getElementById('sync-status').className = 'sync-status ok';
@@ -595,7 +1009,7 @@ async function _exchangeCode(code) {
 }
 
 async function _refreshAccessToken() {
-  const refreshToken = localStorage.getItem('et_refresh_token');
+  const refreshToken = localStorage.getItem(sk('et_refresh_token'));
   if (!refreshToken) return false;
   const res = await fetch('https://login.microsoftonline.com/consumers/oauth2/v2.0/token', {
     method: 'POST',
@@ -610,10 +1024,10 @@ async function _refreshAccessToken() {
   const data = await res.json();
   if (data.access_token) {
     accessToken = data.access_token;
-    localStorage.setItem('et_token', accessToken);
-    if (data.refresh_token) localStorage.setItem('et_refresh_token', data.refresh_token);
+    localStorage.setItem(sk('et_token'), accessToken);
+    if (data.refresh_token) localStorage.setItem(sk('et_refresh_token'), data.refresh_token);
     const expiry = Date.now() + (data.expires_in || 3600) * 1000;
-    localStorage.setItem('et_token_expiry', expiry);
+    localStorage.setItem(sk('et_token_expiry'), expiry);
     return true;
   }
   return false;
@@ -627,30 +1041,33 @@ async function handleAuth() {
     const data = await _exchangeCode(code);
     if (data.access_token) {
       accessToken = data.access_token;
-      localStorage.setItem('et_token', accessToken);
-      if (data.refresh_token) localStorage.setItem('et_refresh_token', data.refresh_token);
+      localStorage.setItem(sk('et_token'), accessToken);
+      if (data.refresh_token) localStorage.setItem(sk('et_refresh_token'), data.refresh_token);
       const expiry = Date.now() + (data.expires_in || 3600) * 1000;
-      localStorage.setItem('et_token_expiry', expiry);
+      localStorage.setItem(sk('et_token_expiry'), expiry);
       showApp();
     } else {
       console.error('Token exchange failed:', data);
+      document.getElementById('auth-screen').style.display = 'flex';
     }
     return;
   }
-  const stored = localStorage.getItem('et_token');
-  const expiry = parseInt(localStorage.getItem('et_token_expiry') || '0');
+  const stored = localStorage.getItem(sk('et_token'));
+  const expiry = parseInt(localStorage.getItem(sk('et_token_expiry')) || '0');
   if (stored) {
     if (expiry && Date.now() > expiry) {
       const refreshed = await _refreshAccessToken();
       if (refreshed) { showApp(); return; }
-      localStorage.removeItem('et_token');
-      localStorage.removeItem('et_refresh_token');
-      localStorage.removeItem('et_token_expiry');
+      localStorage.removeItem(sk('et_token'));
+      localStorage.removeItem(sk('et_refresh_token'));
+      localStorage.removeItem(sk('et_token_expiry'));
     } else {
       accessToken = stored;
       showApp();
+      return;
     }
   }
+  document.getElementById('auth-screen').style.display = 'flex';
 }
 
 function showApp() {
@@ -659,6 +1076,23 @@ function showApp() {
   loadSettings();
   updateGreeting();
   renderOverview();
+
+  // Show/hide couple-specific settings sections
+  const coupleShareSection = document.getElementById('couple-share-section');
+  const ownerSection = document.getElementById('couple-owner-section');
+  const partnerSection = document.getElementById('couple-partner-section');
+  if (currentProfile === 'couple') {
+    coupleShareSection.style.display = 'block';
+    ownerSection.style.display = coupleRole === 'owner' ? 'block' : 'none';
+    partnerSection.style.display = coupleRole === 'partner' ? 'block' : 'none';
+  } else {
+    coupleShareSection.style.display = 'none';
+  }
+
+  // Hide filename setting for partner (they use shared file)
+  const filenameSetting = document.getElementById('setting-filename')?.closest('.setting-row');
+  if (filenameSetting) filenameSetting.style.display = coupleRole === 'partner' ? 'none' : '';
+
   loadExpensesFromSheet();
   addBotMessage("Hey! Ready to track your expenses 💸\n\nJust type something like:\n• Lunch with Ana $18 food\n• Netflix $15 entertainment\n• Uber to office $8 transport\n\nOr type summary to see your budget.");
 }
@@ -859,39 +1293,32 @@ async function handleSend() {
   addBotMessage('Got it!', parsed, alertMsg, saved);
 }
 
-async function getOrCreateFile() {
-  const filename = document.getElementById('setting-filename').value || 'expenses.xlsx';
-  const headers = { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' };
-
-  const check = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`, { headers });
-  if (check.ok) return filename;
-
-  const workbook = {
-    sheets: [{ name: 'Expenses', rows: [
-      { values: [{ value: 'Date' }, { value: 'Description' }, { value: 'Amount' }, { value: 'Category' }] }
-    ]}]
-  };
-
-  await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/content`, {
-    method: 'PUT',
-    headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
-    body: new Blob([''], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  });
-  return filename;
-}
-
 async function saveExpenseToSheet(expense) {
   if (!accessToken) return false;
   try {
-    const filename = document.getElementById('setting-filename').value || 'expenses.xlsx';
+    // For owner/personal: ensure file exists before writing
+    if (coupleRole !== 'partner') {
+      const defaultFile = (PROFILES[currentProfile] || PROFILES.personal).defaultFile;
+      const filename = document.getElementById('setting-filename').value || defaultFile;
+      const headers = { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' };
+      const check = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`, { headers });
+      if (!check.ok) {
+        await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/content`, {
+          method: 'PUT',
+          headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+          body: new Blob([''], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        });
+      }
+    }
+
+    const wbBase = await getWorkbookBase();
+    if (!wbBase) return false;
+
     const cat = CATEGORIES.find(c => c.key === expense.category) || CATEGORIES[5];
     const dateStr = new Date(expense.date).toLocaleDateString('en-US');
+    const authHeader = { 'Authorization': 'Bearer ' + accessToken };
 
-    const rangeRes = await fetch(
-      `https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/workbook/worksheets/Sheet1/usedRange`,
-      { headers: { 'Authorization': 'Bearer ' + accessToken } }
-    );
-
+    const rangeRes = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`, { headers: authHeader });
     let nextRow = 2;
     if (rangeRes.ok) {
       const rangeData = await rangeRes.json();
@@ -899,10 +1326,10 @@ async function saveExpenseToSheet(expense) {
     }
 
     const updateRes = await fetch(
-      `https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/workbook/worksheets/Sheet1/range(address='A${nextRow}:D${nextRow}')`,
+      `${wbBase}/worksheets/Sheet1/range(address='A${nextRow}:D${nextRow}')`,
       {
         method: 'PATCH',
-        headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: [[dateStr, expense.description, expense.amount, cat.name]] })
       }
     );
@@ -916,9 +1343,10 @@ async function saveExpenseToSheet(expense) {
 async function loadExpensesFromSheet() {
   if (!accessToken) return;
   try {
-    const filename = document.getElementById('setting-filename').value || 'expenses.xlsx';
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/workbook/worksheets/Sheet1/usedRange`,
+    const wbBase = await getWorkbookBase();
+    if (!wbBase) return;
+
+    const res = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`,
       { headers: { 'Authorization': 'Bearer ' + accessToken } }
     );
     if (!res.ok) return;
@@ -949,8 +1377,20 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
   if (e.target === this) closeSettings();
 });
 
-handleAuth();
-loadSettings();
+// On load: restore active profile from session, or show profile selector
+(function init() {
+  // Mark profile cards that already have a saved session
+  Object.keys(PROFILES).forEach(p => {
+    const card = document.getElementById('profile-card-' + p);
+    if (card) card.classList.toggle('has-session', !!localStorage.getItem(`et_token_${p}`));
+  });
+
+  const savedProfile = sessionStorage.getItem('et_active_profile');
+  if (savedProfile && PROFILES[savedProfile]) {
+    selectProfile(savedProfile);
+  }
+  // Otherwise profile-screen stays visible (it's the default)
+})();
 </script>
 </body>
 </html>
