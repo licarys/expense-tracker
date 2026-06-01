@@ -107,8 +107,34 @@ One row per expense. Header row written on first use.
 
 ```
 expense-tracker/
-└── index.html   ← entire app (HTML + CSS + JS in one file)
+├── index.html          ← entire app (HTML + CSS + JS in one file)
+└── .cursor/
+    ├── hooks.json      ← Cursor hook definitions
+    └── hooks/
+        └── update-plan.sh  ← fires after git commit/push to remind agent to update PROJECT.md
 ```
+
+---
+
+## Cursor tooling (hooks & skills)
+
+### Current hook: `update-plan`
+
+- **Trigger:** `afterShellExecution` matching `git (commit|push)`
+- **Behavior:** Injects an `agent_message` reminding the active agent to review and update `PROJECT.md`
+- **Works with:** Any model running inside Cursor (Claude, Codex, Cursor default)
+
+### Pending: make hooks & skills model-agnostic
+
+Goal: hooks and skills should work regardless of which AI model is active — Claude, Codex (GPT), or Cursor's own model.
+
+Guidelines to follow when adding future hooks/skills:
+
+- **No model-specific syntax.** Do not use Claude XML tags (`<parameter name="thinking">`, `<result>`) or OpenAI-specific prompt patterns in hook scripts or skill prompts.
+- **Plain `agent_message` / `user_message` only.** These fields are model-neutral; all models receive them the same way.
+- **Behavior described, not format prescribed.** Write hook prompts that describe *what to do*, not *how to format the response* — formatting varies by model.
+- **No hardcoded model names in hook scripts.** Hook scripts should not branch on model identity; let Cursor route to whichever model is active.
+- **Skill prompts: imperative, tool-agnostic language.** Avoid "as Claude..." or "use your XML output format"; prefer "review the file and update the relevant sections".
 
 ---
 
@@ -134,6 +160,8 @@ For local dev, add `http://localhost:8080` as an additional redirect URI in the 
 - ✅ Multi-profile (Personal + Pareja)
 - ✅ PKCE auth with refresh tokens
 - ✅ Couple sharing via OneDrive sharing links
+- ✅ Cursor hook: auto-update PROJECT.md on commit/push
+- Make hooks & skills model-agnostic (Claude / Codex / Cursor)
 - Stable OneDrive sync
 - Reliable natural language parsing
 - Monthly budget summaries in chat
