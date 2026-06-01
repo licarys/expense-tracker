@@ -871,6 +871,7 @@ function signOut() {
   localStorage.removeItem(sk('et_couple_role'));
   localStorage.removeItem(sk('et_couple_share_url'));
   localStorage.removeItem(sk('et_shared_handle'));
+  localStorage.removeItem(sk('et_expenses_cache'));
   accessToken = null;
   coupleRole = null;
   coupleShareUrl = null;
@@ -1259,6 +1260,16 @@ function showApp() {
   const filenameSetting = document.getElementById('setting-filename')?.closest('.setting-row');
   if (filenameSetting) filenameSetting.style.display = coupleRole === 'partner' ? 'none' : '';
 
+  // Show cached expenses instantly while OneDrive loads in background
+  const cached = localStorage.getItem(sk('et_expenses_cache'));
+  if (cached) {
+    try {
+      expenses = JSON.parse(cached);
+      renderOverview();
+      renderLog();
+    } catch(e) { /* ignore corrupt cache */ }
+  }
+
   loadExpensesFromSheet();
   addBotMessage("Hey! Ready to track your expenses 💸\n\nJust type something like:\n• Lunch with Ana $18 food\n• Netflix $15 entertainment\n• Uber to office $8 transport\n\nOr type summary to see your budget.");
 }
@@ -1459,6 +1470,7 @@ async function handleSend() {
   }
 
   expenses.push(parsed);
+  localStorage.setItem(sk('et_expenses_cache'), JSON.stringify(expenses));
   renderOverview();
   renderLog();
 
