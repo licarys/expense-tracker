@@ -545,6 +545,16 @@
   .sync-status { font-size: 11px; font-family: var(--font-mono); color: var(--muted); text-align: center; padding: 8px; }
   .sync-status.ok { color: var(--accent); }
   .sync-status.err { color: var(--danger); }
+
+  select.setting-input {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -665,7 +675,7 @@
         <button class="month-nav-btn" id="next-month-btn" onclick="nextMonth()" title="Next month">›</button>
         <button class="sync-btn" id="sync-btn" onclick="syncFromOneDrive()" title="Sync from OneDrive">↻</button>
       </div>
-      <div class="hero-amount"><span>$</span><span id="hero-total">0.00</span></div>
+      <div class="hero-amount"><span id="hero-currency">$</span><span id="hero-total">0.00</span></div>
       <div class="hero-sub" id="hero-sub">Loading…</div>
     </div>
     <div id="overview-sync-status" style="text-align:center;font-size:11px;font-family:var(--font-mono);color:var(--muted);padding:0 20px 4px;min-height:16px"></div>
@@ -697,6 +707,11 @@
   <div class="modal-sheet">
     <div class="modal-handle"></div>
     <div class="modal-title">Settings</div>
+
+    <div class="setting-row">
+      <label class="setting-label">DEFAULT CURRENCY</label>
+      <select class="setting-input" id="setting-currency"></select>
+    </div>
 
     <div class="setting-row">
       <label class="setting-label">EXCEL FILE NAME (in OneDrive root)</label>
@@ -765,6 +780,89 @@ let selectedMonth = new Date().getMonth();
 let selectedYear  = new Date().getFullYear();
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+const CURRENCIES = [
+  { code:'USD', name:'US Dollar'           },
+  { code:'EUR', name:'Euro'                },
+  { code:'GBP', name:'British Pound'       },
+  { code:'MXN', name:'Mexican Peso'        },
+  { code:'JPY', name:'Japanese Yen'        },
+  { code:'CAD', name:'Canadian Dollar'     },
+  { code:'AUD', name:'Australian Dollar'   },
+  { code:'BRL', name:'Brazilian Real'      },
+  { code:'ARS', name:'Argentine Peso'      },
+  { code:'CLP', name:'Chilean Peso'        },
+  { code:'COP', name:'Colombian Peso'      },
+  { code:'PEN', name:'Peruvian Sol'        },
+  { code:'CHF', name:'Swiss Franc'         },
+  { code:'INR', name:'Indian Rupee'        },
+  { code:'KRW', name:'South Korean Won'    },
+  { code:'CNY', name:'Chinese Yuan'        },
+  { code:'ZAR', name:'South African Rand'  },
+  { code:'DKK', name:'Danish Krone'        },
+  { code:'NOK', name:'Norwegian Krone'     },
+  { code:'SEK', name:'Swedish Krona'       },
+  { code:'PLN', name:'Polish Zloty'        },
+  { code:'CZK', name:'Czech Koruna'        },
+  { code:'HUF', name:'Hungarian Forint'    },
+  { code:'TRY', name:'Turkish Lira'        },
+  { code:'THB', name:'Thai Baht'           },
+];
+
+// Currency symbol detection order matters (multi-char first)
+const CURRENCY_SYMBOL_MAP = [
+  { sym: 'R$',  code: 'BRL' },
+  { sym: 'MX$', code: 'MXN' },
+  { sym: 'C$',  code: 'CAD' },
+  { sym: 'A$',  code: 'AUD' },
+  { sym: 'S/',  code: 'PEN' },
+  { sym: '€',   code: 'EUR' },
+  { sym: '£',   code: 'GBP' },
+  { sym: '¥',   code: 'JPY' },
+  { sym: '₩',   code: 'KRW' },
+  { sym: '₹',   code: 'INR' },
+  { sym: '₪',   code: 'ILS' },
+  { sym: 'Fr',  code: 'CHF' },
+];
+
+const CURRENCY_CODE_RE = /\b(USD|EUR|GBP|JPY|MXN|CAD|AUD|BRL|CHF|KRW|INR|ILS|ARS|CLP|COP|PEN|CNY|ZAR|DKK|NOK|SEK|PLN|CZK|HUF|TRY|THB)\b/i;
+
+function getDefaultCurrency() {
+  try {
+    const s = JSON.parse(localStorage.getItem(sk('et_settings')) || '{}');
+    return s.currency || 'USD';
+  } catch(e) { return 'USD'; }
+}
+
+function formatAmount(amount, currencyCode) {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode || 'USD' }).format(amount);
+  } catch(e) {
+    return '$' + amount.toFixed(2);
+  }
+}
+
+function getCurrencySymbol(code) {
+  try {
+    const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency: code || 'USD' }).formatToParts(0);
+    return parts.find(p => p.type === 'currency')?.value || code;
+  } catch(e) { return code || '$'; }
+}
+
+function initCurrencySelect() {
+  const sel = document.getElementById('setting-currency');
+  if (!sel) return;
+  if (sel.options.length === 0) {
+    CURRENCIES.forEach(c => {
+      const sym = getCurrencySymbol(c.code);
+      const opt = document.createElement('option');
+      opt.value = c.code;
+      opt.textContent = `${c.code} — ${c.name} (${sym})`;
+      sel.appendChild(opt);
+    });
+  }
+  sel.value = getDefaultCurrency();
+}
 
 function prevMonth() {
   selectedMonth--;
@@ -1064,6 +1162,7 @@ function loadSettings() {
     if (s.budgets) CATEGORIES.forEach(c => { if (s.budgets[c.key]) c.budget = s.budgets[c.key]; });
     if (s.filename) document.getElementById('setting-filename').value = s.filename;
   }
+  initCurrencySelect();
 }
 
 function saveSettings() {
@@ -1079,8 +1178,10 @@ function saveSettings() {
   const customCategories = CATEGORIES.filter(c => !c.isDefault).map(({ key, name, emoji, budget }) => ({ key, name, emoji, budget }));
   localStorage.setItem('et_custom_categories', JSON.stringify(customCategories));
 
-  // Save budgets and filename per-profile
-  localStorage.setItem(sk('et_settings'), JSON.stringify({ budgets, filename }));
+  const currency = document.getElementById('setting-currency')?.value || 'USD';
+
+  // Save budgets, filename, and currency per-profile
+  localStorage.setItem(sk('et_settings'), JSON.stringify({ budgets, filename, currency }));
 
   // Persist all categories + budgets to OneDrive sheet (source of truth across devices)
   saveCategoriesToSheet();
@@ -1353,24 +1454,50 @@ function switchTab(tab) {
   document.getElementById(tab + '-panel').classList.add('active');
 }
 
+function detectCurrency(text) {
+  // Multi-char symbols first (order matters)
+  for (const { sym, code } of CURRENCY_SYMBOL_MAP) {
+    if (text.includes(sym)) return code;
+  }
+  // ISO currency codes (e.g. "150 EUR", "MXN 150")
+  const m = text.match(CURRENCY_CODE_RE);
+  if (m) return m[1].toUpperCase();
+  return null;
+}
+
 function parseExpense(text) {
-  const amountMatch = text.match(/\$?([\d]+(?:\.\d{1,2})?)/);
+  const currency = detectCurrency(text) || getDefaultCurrency();
+
+  // Strip all known currency symbols/codes to isolate the number
+  let cleaned = text;
+  for (const { sym } of CURRENCY_SYMBOL_MAP) {
+    cleaned = cleaned.split(sym).join(' ');
+  }
+  cleaned = cleaned.replace(CURRENCY_CODE_RE, ' ').replace(/\$/g, ' ');
+
+  const amountMatch = cleaned.match(/[\d]+(?:[.,]\d{1,2})?/);
   if (!amountMatch) return null;
-  const amount = parseFloat(amountMatch[1]);
+  const amount = parseFloat(amountMatch[0].replace(',', '.'));
+  if (!amount || amount <= 0) return null;
+
   const lower = text.toLowerCase();
   let category = 'other';
   for (const [cat, keys] of Object.entries(CAT_KEYWORDS)) {
     if (keys.some(k => lower.includes(k))) { category = cat; break; }
   }
-  let description = text.replace(/\$[\d.]+/, '').trim();
+
+  // Build description by removing amount, currency markers, and category name
+  let description = cleaned.replace(/[\d]+(?:[.,]\d{1,2})?/, '').trim();
   const catObj = CATEGORIES.find(c => c.key === category);
   if (catObj) description = description.replace(new RegExp(catObj.name, 'gi'), '').trim();
-  description = description.replace(/,\s*$/, '').trim();
+  description = description.replace(/,\s*$/, '').replace(/\s+/g, ' ').trim();
   if (description.length < 2) description = text.trim();
-  return { description, amount, category, date: new Date().toISOString() };
+
+  return { description, amount, currency, category, date: new Date().toISOString() };
 }
 
 function renderOverview() {
+  const defaultCurrency = getDefaultCurrency();
   const monthExpenses = expenses.filter(e => {
     const d = new Date(e.date);
     return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
@@ -1389,15 +1516,28 @@ function renderOverview() {
     nextBtn.disabled = selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
   }
 
-  document.getElementById('hero-total').textContent = total.toFixed(2);
-  document.getElementById('hero-sub').textContent = `$${(totalBudget - total).toFixed(2)} remaining of $${totalBudget} budget`;
+  // Update hero amount: split into currency symbol + number for styled display
+  const heroParts = new Intl.NumberFormat('en-US', { style: 'currency', currency: defaultCurrency }).formatToParts(total);
+  const heroSym = heroParts.find(p => p.type === 'currency')?.value || '$';
+  const heroNum = heroParts.filter(p => ['integer','group','decimal','fraction'].includes(p.type)).map(p => p.value).join('');
+  const heroCurEl = document.getElementById('hero-currency');
+  if (heroCurEl) heroCurEl.textContent = heroSym;
+  document.getElementById('hero-total').textContent = heroNum;
+
+  // Show "mixed currencies" hint if the month has expenses in multiple currencies
+  const uniqueCurrencies = [...new Set(monthExpenses.map(e => e.currency || defaultCurrency))];
+  const isMixed = uniqueCurrencies.length > 1;
+  const remaining = totalBudget - total;
+  document.getElementById('hero-sub').textContent =
+    `${formatAmount(remaining, defaultCurrency)} remaining of ${formatAmount(totalBudget, defaultCurrency)} budget` +
+    (isMixed ? ' · mixed currencies' : '');
 
   const list = document.getElementById('budget-list');
   list.innerHTML = '';
   CATEGORIES.forEach(c => {
     const pct = Math.min((c.spent / c.budget) * 100, 100);
-    const remaining = c.budget - c.spent;
-    const over = remaining < 0;
+    const catRemaining = c.budget - c.spent;
+    const over = catRemaining < 0;
     const warn = pct >= 80 && !over;
     const fillClass = over ? 'over' : warn ? 'warn' : '';
     const div = document.createElement('div');
@@ -1405,11 +1545,11 @@ function renderOverview() {
     div.innerHTML = `
       <div class="budget-row-top">
         <span class="budget-row-name"><span class="emoji">${c.emoji}</span>${c.name}</span>
-        <span class="budget-row-amounts"><span class="spent">$${c.spent.toFixed(0)}</span> / $${c.budget}</span>
+        <span class="budget-row-amounts"><span class="spent">${formatAmount(c.spent, defaultCurrency)}</span> / ${formatAmount(c.budget, defaultCurrency)}</span>
       </div>
       <div class="bar-track"><div class="bar-fill ${fillClass}" style="width:${pct}%"></div></div>
       <div class="budget-row-footer">
-        <span class="budget-remaining ${over ? 'over' : ''}">${over ? '⚠ $'+Math.abs(remaining).toFixed(0)+' over budget' : '$'+remaining.toFixed(0)+' left'}</span>
+        <span class="budget-remaining ${over ? 'over' : ''}">${over ? '⚠ ' + formatAmount(Math.abs(catRemaining), defaultCurrency) + ' over budget' : formatAmount(catRemaining, defaultCurrency) + ' left'}</span>
         <span style="font-size:11px;font-family:var(--font-mono);color:var(--muted)">${Math.round(pct)}%</span>
       </div>
     `;
@@ -1441,7 +1581,7 @@ function renderLog() {
         <div class="log-desc">${e.description}</div>
         <div class="log-meta">${cat.name} · ${dateStr}</div>
       </div>
-      <div class="log-amount">$${e.amount.toFixed(2)}</div>
+      <div class="log-amount">${formatAmount(e.amount, e.currency || getDefaultCurrency())}</div>
     `;
     list.appendChild(div);
   });
@@ -1458,11 +1598,12 @@ function addBotMessage(text, expenseData, alertMsg, saved) {
     const remaining = cat.budget - cat.spent;
     const pill = document.createElement('div');
     pill.className = 'expense-pill';
+    const expCurrency = expenseData.currency || getDefaultCurrency();
     pill.innerHTML = `
       <span class="pill-label">desc</span><span class="pill-val">${expenseData.description}</span>
-      <span class="pill-label">amount</span><span class="pill-val green">$${expenseData.amount.toFixed(2)}</span>
+      <span class="pill-label">amount</span><span class="pill-val green">${formatAmount(expenseData.amount, expCurrency)}</span>
       <span class="pill-label">category</span><span class="pill-val">${cat.emoji} ${cat.name}</span>
-      <span class="pill-label">remaining</span><span class="pill-val ${remaining < 0 ? 'red' : ''}">${remaining < 0 ? '-' : ''}$${Math.abs(remaining).toFixed(0)}</span>
+      <span class="pill-label">remaining</span><span class="pill-val ${remaining < 0 ? 'red' : ''}">${formatAmount(Math.abs(remaining), getDefaultCurrency())}${remaining < 0 ? ' over' : ' left'}</span>
     `;
     wrapper.appendChild(pill);
   }
@@ -1523,7 +1664,8 @@ async function handleSend() {
 
   const lower = text.toLowerCase();
   if (lower === 'summary' || lower.includes('how much') || lower.includes('budget')) {
-    const lines = CATEGORIES.map(c => `${c.emoji} ${c.name}: $${c.spent.toFixed(0)} / $${c.budget}`).join('\n');
+    const defaultCurrency = getDefaultCurrency();
+    const lines = CATEGORIES.map(c => `${c.emoji} ${c.name}: ${formatAmount(c.spent, defaultCurrency)} / ${formatAmount(c.budget, defaultCurrency)}`).join('\n');
     addBotMessage('Here\'s your month so far:\n\n' + lines);
     return;
   }
@@ -1545,7 +1687,7 @@ async function handleSend() {
 
   const cat = CATEGORIES.find(c => c.key === parsed.category) || CATEGORIES[5];
   const over = cat.spent > cat.budget;
-  const alertMsg = over ? `You're $${(cat.spent - cat.budget).toFixed(0)} over your ${cat.name} budget.` : null;
+  const alertMsg = over ? `You're ${formatAmount(cat.spent - cat.budget, getDefaultCurrency())} over your ${cat.name} budget.` : null;
 
   const saved = await saveExpenseToSheet(parsed);
   addBotMessage('Got it!', parsed, alertMsg, saved);
@@ -1628,33 +1770,42 @@ async function saveExpenseToSheet(expense) {
     const rangeRes = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`, { headers: authHeader });
     let nextRow = 2;
     let needsHeader = true;
+    let existingFirstRow = [];
 
     if (rangeRes.ok) {
       const rangeData = await rangeRes.json();
       const rowCount = rangeData.rowCount || 0;
-      const firstVal = ((rangeData.values || [])[0] || [])[0];
-      if (rowCount > 0 && firstVal === 'Date') {
+      existingFirstRow = (rangeData.values || [])[0] || [];
+      if (rowCount > 0 && existingFirstRow[0] === 'Date') {
         needsHeader = false;
         nextRow = rowCount + 1;
       }
     }
 
     if (needsHeader) {
-      const hRes = await fetch(`${wbBase}/worksheets/Sheet1/range(address='A1:D1')`, {
+      const hRes = await fetch(`${wbBase}/worksheets/Sheet1/range(address='A1:E1')`, {
         method: 'PATCH',
         headers: { ...authHeader, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [['Date', 'Description', 'Amount', 'Category']] })
+        body: JSON.stringify({ values: [['Date', 'Description', 'Amount', 'Category', 'Currency']] })
       });
       if (!hRes.ok) { console.error('Header write failed', await hRes.text()); return false; }
       nextRow = 2;
+    } else if (existingFirstRow[4] !== 'Currency') {
+      // Silently add Currency header to existing files that don't have it yet
+      await fetch(`${wbBase}/worksheets/Sheet1/range(address='E1:E1')`, {
+        method: 'PATCH',
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [['Currency']] })
+      }).catch(() => {});
     }
 
+    const expCurrency = expense.currency || getDefaultCurrency();
     const updateRes = await fetch(
-      `${wbBase}/worksheets/Sheet1/range(address='A${nextRow}:D${nextRow}')`,
+      `${wbBase}/worksheets/Sheet1/range(address='A${nextRow}:E${nextRow}')`,
       {
         method: 'PATCH',
         headers: { ...authHeader, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [[dateStr, expense.description, expense.amount, cat.name]] })
+        body: JSON.stringify({ values: [[dateStr, expense.description, expense.amount, cat.name, expCurrency]] })
       }
     );
     if (!updateRes.ok) console.error('Row write failed', await updateRes.text());
@@ -1812,7 +1963,11 @@ async function loadExpensesFromSheet() {
     expenses = rows.slice(1).filter(r => r[0] && r[2]).map(r => {
       const d = new Date(r[0]);
       const catObj = resolveOrCreateCategory(r[3] || '');
-      return { date: d.toISOString(), description: r[1] || '', amount: parseFloat(r[2]) || 0, category: catObj.key };
+      // Column E (index 4) is Currency — fall back to profile default for old rows
+      const currency = (r[4] && typeof r[4] === 'string' && r[4].trim().length > 0)
+        ? r[4].trim().toUpperCase()
+        : getDefaultCurrency();
+      return { date: d.toISOString(), description: r[1] || '', amount: parseFloat(r[2]) || 0, category: catObj.key, currency };
     });
 
     localStorage.setItem(sk('et_expenses_cache'), JSON.stringify(expenses));
