@@ -631,6 +631,9 @@
     <div class="setting-row">
       <label class="setting-label">EXCEL FILE NAME (in OneDrive root)</label>
       <input class="setting-input" id="setting-filename" value="expenses.xlsx" placeholder="expenses.xlsx">
+      <button id="open-excel-btn" onclick="openInOneDrive()" style="margin-top:8px;width:100%;padding:11px;background:transparent;border:1px solid var(--border2);border-radius:12px;color:var(--muted);font-family:var(--font-sans);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+        <span style="font-size:15px">↗</span> Open in Excel Online
+      </button>
     </div>
 
     <!-- Couple sharing section (only shown for couple profile) -->
@@ -1291,6 +1294,43 @@ async function handleSend() {
 
   const saved = await saveExpenseToSheet(parsed);
   addBotMessage('Got it!', parsed, alertMsg, saved);
+}
+
+async function openInOneDrive() {
+  if (!accessToken) return;
+  const btn = document.getElementById('open-excel-btn');
+  const origText = btn.innerHTML;
+  btn.innerHTML = '<span style="font-size:15px">⏳</span> Opening…';
+  btn.disabled = true;
+  try {
+    let webUrl;
+    if (coupleRole === 'partner' && sharedFileHandle) {
+      const res = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${sharedFileHandle.driveId}/items/${sharedFileHandle.itemId}`,
+        { headers: { 'Authorization': 'Bearer ' + accessToken } }
+      );
+      if (res.ok) webUrl = (await res.json()).webUrl;
+    } else {
+      const defaultFile = (PROFILES[currentProfile] || PROFILES.personal).defaultFile;
+      const filename = document.getElementById('setting-filename').value || defaultFile;
+      const res = await fetch(
+        `https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`,
+        { headers: { 'Authorization': 'Bearer ' + accessToken } }
+      );
+      if (res.ok) webUrl = (await res.json()).webUrl;
+    }
+    if (webUrl) {
+      window.open(webUrl, '_blank');
+    } else {
+      btn.innerHTML = '<span style="font-size:15px">⚠️</span> File not found — log an expense first';
+      setTimeout(() => { btn.innerHTML = origText; btn.disabled = false; }, 3000);
+      return;
+    }
+  } catch (e) {
+    console.error('openInOneDrive error:', e);
+  }
+  btn.innerHTML = origText;
+  btn.disabled = false;
 }
 
 // Minimal valid empty xlsx workbook (base64). Used when creating the file for the first time.
