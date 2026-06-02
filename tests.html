@@ -347,6 +347,56 @@ describe('shouldWriteHeader', () => {
   });
 });
 
+describe('findSharedExpenseFile', () => {
+  const items = [
+    {
+      name: 'expenses-pareja.xlsx',
+      id: 'local-123',
+      remoteItem: { id: 'remote-456', parentReference: { driveId: 'drive-789' } }
+    },
+    {
+      name: 'other-file.docx',
+      id: 'local-abc',
+      remoteItem: { id: 'remote-def', parentReference: { driveId: 'drive-ghi' } }
+    },
+  ];
+
+  it('finds the matching file by name', () => {
+    const result = findSharedExpenseFile(items, 'expenses-pareja.xlsx');
+    expect(result).toBeTruthy();
+  });
+
+  it('uses remoteItem.id as itemId', () => {
+    const result = findSharedExpenseFile(items, 'expenses-pareja.xlsx');
+    expect(result.itemId).toBe('remote-456');
+  });
+
+  it('uses remoteItem.parentReference.driveId as driveId', () => {
+    const result = findSharedExpenseFile(items, 'expenses-pareja.xlsx');
+    expect(result.driveId).toBe('drive-789');
+  });
+
+  it('returns null when filename not found', () => {
+    expect(findSharedExpenseFile(items, 'not-found.xlsx')).toBeNull();
+  });
+
+  it('returns null for empty items array', () => {
+    expect(findSharedExpenseFile([], 'expenses-pareja.xlsx')).toBeNull();
+  });
+
+  it('falls back to top-level ids when remoteItem is absent', () => {
+    const localItems = [{ name: 'expenses.xlsx', id: 'top-id', parentReference: { driveId: 'top-drive' } }];
+    const result = findSharedExpenseFile(localItems, 'expenses.xlsx');
+    expect(result.itemId).toBe('top-id');
+    expect(result.driveId).toBe('top-drive');
+  });
+
+  it('does not mutate the input array', () => {
+    findSharedExpenseFile(items, 'expenses-pareja.xlsx');
+    expect(items.length).toBe(2);
+  });
+});
+
 describe('isTokenExpired', () => {
   it('returns false when expiryMs is 0', () => {
     expect(isTokenExpired(0, 1_000_000)).toBeFalsy();

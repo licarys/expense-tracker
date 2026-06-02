@@ -252,6 +252,30 @@ function parseExpense(text) {
 }
 
 // ---------------------------------------------------------------------------
+// Partner file discovery helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Finds the expense file in the array returned by GET /me/drive/sharedWithMe.
+ * Files shared from another drive are represented with a `remoteItem` wrapper —
+ * those IDs are used to build the workbook API URL.
+ * Pure function — no side effects.
+ *
+ * @param {Array}  items    - array of DriveItem objects from sharedWithMe
+ * @param {string} filename - expected filename (e.g. "expenses-pareja.xlsx")
+ * @returns {{ driveId: string, itemId: string } | null}
+ */
+function findSharedExpenseFile(items, filename) {
+  const item = items.find(i => i.name === filename);
+  if (!item) return null;
+  const ri = item.remoteItem;
+  if (ri) {
+    return { driveId: ri.parentReference?.driveId, itemId: ri.id };
+  }
+  return { driveId: item.parentReference?.driveId, itemId: item.id };
+}
+
+// ---------------------------------------------------------------------------
 // Token expiry check
 // ---------------------------------------------------------------------------
 
