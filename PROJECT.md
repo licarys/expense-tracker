@@ -171,9 +171,9 @@ No npm, no build step. The test suite is a standalone HTML file that imports `ut
 - **Behavior:** Injects an `agent_message` reminding the active agent to review and update `PROJECT.md`
 - **Works with:** Any model running inside Cursor (Claude, Codex, Cursor default)
 
-### Pending: make hooks & skills model-agnostic
+### Hooks & skills are model-agnostic
 
-Goal: hooks and skills should work regardless of which AI model is active — Claude, Codex (GPT), or Cursor's own model.
+Hooks and skills work regardless of which AI model is active — Claude, Codex (GPT), or Cursor's own model.
 
 Guidelines to follow when adding future hooks/skills:
 
@@ -208,7 +208,7 @@ For local dev, add `http://localhost:8080` as an additional redirect URI in the 
 - ✅ PKCE auth with refresh tokens
 - ✅ Couple sharing via OneDrive sharing links
 - ✅ Cursor hook: auto-update PROJECT.md on commit/push
-- Make hooks & skills model-agnostic (Claude / Codex / Cursor)
+- ✅ Hooks & skills model-agnostic (Claude / Codex / Cursor) — `agent_message` only, behavior-described, no model syntax
 - Stable OneDrive sync
 - Reliable natural language parsing
 - Monthly budget summaries in chat
