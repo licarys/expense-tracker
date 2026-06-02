@@ -45,6 +45,7 @@ No npm. No framework. No backend. No paid services.
 
 - **Multi-profile support** — Personal and Pareja profiles, each with its own Microsoft account, tokens, settings, and OneDrive file
 - **Couple sharing** — Pareja owner invites partner by Microsoft email via the Graph API `invite` endpoint (`requireSignIn: true`); partner signs in and the app auto-discovers the shared file via `GET /me/drive/sharedWithMe` — no anonymous links
+- **Quién pagó** — Pareja profile tracks who paid each expense: auto-detected from chat text via `parsePaidBy`, "¿Quién pagó?" picker in chat for manual selection, payer tag in expense history, column G in Excel; `summary` shows per-person totals
 - **PKCE auth** — Secure OAuth 2.0 authorization code flow with PKCE; refresh tokens handled automatically
 - **Sign out** — Per-profile sign out from Settings; returns to profile selector
 - **Profile badge** — Visible in header, tap to switch profiles
@@ -85,13 +86,14 @@ All budgets are configurable in the settings panel and saved to localStorage.
 
 Sheet: `Sheet1`
 
-| Column A | Column B | Column C | Column D | Column E | Column F |
-|---|---|---|---|---|---|
-| Date | Description | Amount | Category | Currency | Converted to USD |
+| Column A | Column B | Column C | Column D | Column E | Column F | Column G |
+|---|---|---|---|---|---|---|
+| Date | Description | Amount | Category | Currency | Converted to USD | Paid By |
 
 - **Amount (C):** Original amount in the currency used when logging (e.g. 500 in córdobas).
 - **Currency (E):** ISO code from input (`C$` → NIO, `MXN`, …) or `USD` when none detected.
 - **Converted to USD (F):** Same expense converted to US dollars at save time (using your exchange rates). Use this column in Excel for sums (`=SUM(F:F)`). The app uses it for budgets and overview totals.
+- **Paid By (G):** Display name of who paid (Pareja profile only). Auto-detected from chat text or set via the "¿Quién pagó?" picker. Empty for personal expenses or when not specified.
 
 One row per expense. Header row written on first use; older files get missing column headers patched on the next write.
 
@@ -123,7 +125,7 @@ One row per expense. Header row written on first use; older files get missing co
 - [x] 401 handling — `apiFetch` wrapper: silent refresh → retry → `handleAuthExpired()` (re-login screen with message); covers all Graph API calls
 - [x] Partner sharing link scope — replaced `anonymous` createLink with invite API (`requireSignIn: true`); partner auto-discovers file via `sharedWithMe`
 - [ ] Monthly data scope — currently filters to current month only on load
-- [ ] **Pareja — quién pagó:** registrar qué persona pagó cada gasto (útil tanto para parejas como para usuarios individuales que quieran rastrear el pagador)
+- [x] **Pareja — quién pagó:** registrar qué persona pagó cada gasto — auto-detección desde el texto, picker "¿Quién pagó?" en el chat, tag en el historial, columna G en Excel, resumen por persona en `summary`
 - [ ] **Separar JS del HTML:** extraer el `<script>` a un archivo `app.js` independiente para mejorar mantenibilidad
 - [x] **Búsqueda de categorías:** campo de búsqueda/filtro en Overview y en Settings → Monthly budgets; usa `filterCategories()` (pure function, tested)
 - [x] **Bug — fecha "Dec 1969":** Excel serial dates from Graph API were passed to `new Date()` as milliseconds; fixed with `parseExpenseDate()` in `loadExpensesFromSheet`
@@ -165,6 +167,8 @@ No npm, no build step. The test suite is a standalone HTML file that imports `ut
 - `filterCategories` — case-insensitive partial name filter for category lists
 - `isTokenExpired` — checks token expiry timestamp against current time (testable with optional `nowMs`)
 - `findSharedExpenseFile` — finds a matching filename in a `sharedWithMe` item list, handling `remoteItem` wrapper for cross-account shares
+- `parsePaidBy` — detects who paid from free text using configurable alias lists (word-boundary regex, case-insensitive, pure)
+- `buildPayerSummary` — per-payer USD totals for a given month (pure)
 
 ---
 

@@ -562,6 +562,99 @@ describe('buildMonthlySummary', () => {
   });
 });
 
+describe('parsePaidBy', () => {
+  const aliases = [
+    { key: 'yo',      names: ['yo', 'lili'] },
+    { key: 'partner', names: ['él', 'gaby'] },
+  ];
+
+  it('returns null when text has no payer keyword', () => {
+    expect(parsePaidBy('Lunch $12 food', aliases)).toBeNull();
+  });
+  it('detects "yo" as self (at start of string)', () => {
+    expect(parsePaidBy('yo pagué el lunch $12', aliases)).toBe('yo');
+  });
+  it('detects "yo" mid-sentence', () => {
+    expect(parsePaidBy('pague yo el taxi $8', aliases)).toBe('yo');
+  });
+  it('detects partner by name', () => {
+    expect(parsePaidBy('gaby pagó el taxi $8', aliases)).toBe('partner');
+  });
+  it('detects partner by pronoun "él"', () => {
+    expect(parsePaidBy('él pagó el café $3', aliases)).toBe('partner');
+  });
+  it('is case-insensitive', () => {
+    expect(parsePaidBy('LILI pagó $20', aliases)).toBe('yo');
+  });
+  it('returns null for empty string', () => {
+    expect(parsePaidBy('', aliases)).toBeNull();
+  });
+  it('returns null for null text', () => {
+    expect(parsePaidBy(null, aliases)).toBeNull();
+  });
+  it('returns null for empty aliases list', () => {
+    expect(parsePaidBy('yo pagué $10', [])).toBeNull();
+  });
+  it('returns null when aliases is null', () => {
+    expect(parsePaidBy('yo pagué $10', null)).toBeNull();
+  });
+  it('does not match "yo" inside a longer word like "yogurt"', () => {
+    expect(parsePaidBy('yogurt $5', aliases)).toBeNull();
+  });
+  it('returns the first matching payer key when multiple could match', () => {
+    const aliasesOverlap = [
+      { key: 'yo', names: ['yo', 'lili'] },
+      { key: 'partner', names: ['yo', 'gaby'] }, // 'yo' also in partner
+    ];
+    expect(parsePaidBy('yo pagué $10', aliasesOverlap)).toBe('yo');
+  });
+});
+
+describe('buildPayerSummary', () => {
+  localStorage.setItem('et_exchange_rates', JSON.stringify({ NIO: 36.5 }));
+
+  const junExpenses = [
+    { date: '2026-06-01', amount: 30,  currency: 'USD', paidBy: 'Lili' },
+    { date: '2026-06-05', amount: 20,  currency: 'USD', paidBy: 'Gaby' },
+    { date: '2026-06-10', amount: 15,  currency: 'USD', paidBy: 'Lili' },
+    { date: '2026-05-20', amount: 99,  currency: 'USD', paidBy: 'Lili' }, // May — excluded
+    { date: '2026-06-15', amount: 10,  currency: 'USD', paidBy: null   }, // no payer — excluded
+    { date: '2026-06-20', amount: 365, currency: 'NIO', paidBy: 'Gaby' }, // foreign currency
+  ];
+
+  it('returns totals per payer for the target month', () => {
+    const r = buildPayerSummary(junExpenses, 5, 2026);
+    expect(r['Lili']).toBeCloseTo(45, 2); // 30 + 15
+  });
+  it('sums multiple expenses for the same payer', () => {
+    const r = buildPayerSummary(junExpenses, 5, 2026);
+    // Gaby: $20 + 365 NIO ≈ $20 + $10 = $30
+    expect(r['Gaby']).toBeCloseTo(30, 2);
+  });
+  it('excludes expenses from other months', () => {
+    const r = buildPayerSummary(junExpenses, 5, 2026);
+    // If May were included, Lili total would be 144
+    expect(r['Lili']).toBeCloseTo(45, 2);
+  });
+  it('excludes expenses with null paidBy', () => {
+    const r = buildPayerSummary(junExpenses, 5, 2026);
+    expect(r[null]).toBeUndefined();
+    expect(r['undefined']).toBeUndefined();
+  });
+  it('returns empty object for month with no data', () => {
+    const r = buildPayerSummary(junExpenses, 0, 2026);
+    expect(Object.keys(r).length).toBe(0);
+  });
+  it('returns empty object for empty expenses list', () => {
+    const r = buildPayerSummary([], 5, 2026);
+    expect(Object.keys(r).length).toBe(0);
+  });
+  it('does not mutate the input array', () => {
+    buildPayerSummary(junExpenses, 5, 2026);
+    expect(junExpenses.length).toBe(6);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Render results
 // ---------------------------------------------------------------------------

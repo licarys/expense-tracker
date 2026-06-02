@@ -410,6 +410,42 @@
   .empty-state { text-align: center; padding: 48px 20px; color: var(--muted); font-size: 14px; line-height: 1.7; }
   .empty-icon { font-size: 32px; margin-bottom: 12px; }
 
+  /* PAYER PICKER (¿Quién pagó?) */
+  .payer-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .payer-picker-label { font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+  .payer-btn {
+    padding: 5px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .payer-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .payer-btn.selected { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
+  /* PAYER TAG in log rows */
+  .payer-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    background: var(--accent-dim);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+
   /* SETTINGS MODAL */
   #settings-modal {
     display: none;
@@ -713,6 +749,20 @@
       <button id="open-excel-btn" onclick="openInOneDrive()" style="margin-top:8px;width:100%;padding:11px;background:transparent;border:1px solid var(--border2);border-radius:12px;color:var(--muted);font-family:var(--font-sans);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
         <span style="font-size:15px">↗</span> Open in Excel Online
       </button>
+    </div>
+
+    <!-- Pareja names (only shown for couple profile) -->
+    <div id="pareja-names-section" style="display:none">
+      <div class="modal-title" style="margin-top:8px">Pareja — Nombres</div>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.5">Usados para detectar quién pagó en los gastos y mostrarlo en el historial.</p>
+      <div class="setting-row">
+        <label class="setting-label">TU NOMBRE</label>
+        <input class="setting-input" id="setting-my-name" placeholder="Ej. Lili">
+      </div>
+      <div class="setting-row">
+        <label class="setting-label">NOMBRE DE TU PAREJA</label>
+        <input class="setting-input" id="setting-partner-name" placeholder="Ej. Gaby">
+      </div>
     </div>
 
     <!-- Couple sharing section (only shown for couple profile) -->
@@ -1252,6 +1302,55 @@ async function getWorkbookBase() {
 
 // CATEGORIES (initial declaration) and CAT_KEYWORDS are in utils.js
 
+// ---------------------------------------------------------------------------
+// Payer helpers (Pareja profile)
+// ---------------------------------------------------------------------------
+
+// Returns alias list for parsePaidBy based on the names stored in settings.
+function getPayerAliases() {
+  const s = JSON.parse(localStorage.getItem(sk('et_settings')) || '{}');
+  const myName = (s.myName || '').trim().toLowerCase();
+  const partnerName = (s.partnerName || '').trim().toLowerCase();
+  return [
+    { key: 'yo',      names: ['yo'].concat(myName ? [myName] : []) },
+    { key: 'partner', names: ['él', 'ella'].concat(partnerName ? [partnerName] : []) },
+  ];
+}
+
+// Resolves a payer key ('yo' | 'partner') to the configured display name.
+function getPayerLabel(key) {
+  const s = JSON.parse(localStorage.getItem(sk('et_settings')) || '{}');
+  if (key === 'yo')      return (s.myName      && s.myName.trim())      ? s.myName.trim()      : 'Yo';
+  if (key === 'partner') return (s.partnerName  && s.partnerName.trim()) ? s.partnerName.trim() : 'Pareja';
+  return key || '';
+}
+
+// Updates who paid for the most recently added expense (in-memory + Excel).
+async function selectPayer(expDesc, expDate, excelRow, payerLabel) {
+  const idx = expenses.findIndex(e => e.date === expDate && e.description === expDesc);
+  if (idx >= 0) {
+    expenses[idx].paidBy = payerLabel;
+    localStorage.setItem(sk('et_expenses_cache'), JSON.stringify(expenses));
+    renderLog();
+  }
+  if (accessToken && excelRow) {
+    try {
+      const wbBase = await getWorkbookBase();
+      if (wbBase) {
+        await apiFetch(`${wbBase}/worksheets/Sheet1/range(address='G${excelRow}:G${excelRow}')`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: [[payerLabel]] })
+        });
+      }
+    } catch(e) { /* silent — payer will be updated on next sync */ }
+  }
+  const picker = document.querySelector(`.payer-picker[data-row="${excelRow}"]`);
+  if (picker) {
+    picker.innerHTML = `<span style="font-size:12px;color:var(--accent);font-family:var(--font-mono)">✓ Pagó ${payerLabel}</span>`;
+  }
+}
+
 function loadSettings() {
   // Reset to defaults so profiles don't bleed into each other
   CATEGORIES = [
@@ -1310,7 +1409,15 @@ async function saveSettings() {
   recalculateAllAmountUsd();
   localStorage.setItem(sk('et_expenses_cache'), JSON.stringify(expenses));
 
-  localStorage.setItem(sk('et_settings'), JSON.stringify({ budgets, filename, exchangeRates: rates }));
+  const existing = JSON.parse(localStorage.getItem(sk('et_settings')) || '{}');
+  const newSettings = { ...existing, budgets, filename, exchangeRates: rates };
+  if (currentProfile === 'couple') {
+    const myNameEl      = document.getElementById('setting-my-name');
+    const partnerNameEl = document.getElementById('setting-partner-name');
+    if (myNameEl)      newSettings.myName      = myNameEl.value.trim();
+    if (partnerNameEl) newSettings.partnerName = partnerNameEl.value.trim();
+  }
+  localStorage.setItem(sk('et_settings'), JSON.stringify(newSettings));
 
   await syncAmountUsdColumnToExcel();
   await saveCategoriesToSheet();
@@ -1373,6 +1480,16 @@ function openSettings() {
   // Pre-fill stored partner email (owner view)
   const emailEl = document.getElementById('partner-email-input');
   if (emailEl) emailEl.value = localStorage.getItem(sk('et_partner_email')) || '';
+  // Show / populate Pareja names section
+  const parejaNamesEl = document.getElementById('pareja-names-section');
+  if (parejaNamesEl) {
+    parejaNamesEl.style.display = currentProfile === 'couple' ? 'block' : 'none';
+    if (currentProfile === 'couple') {
+      const s = JSON.parse(localStorage.getItem(sk('et_settings')) || '{}');
+      document.getElementById('setting-my-name').value      = s.myName      || '';
+      document.getElementById('setting-partner-name').value = s.partnerName || '';
+    }
+  }
   renderCatSettings();
   cancelAddCategory();
   document.getElementById('settings-modal').classList.add('open');
@@ -1759,10 +1876,13 @@ function renderLog() {
     const expCur = e.currency || BASE_CURRENCY;
     const isForeign = expCur !== BASE_CURRENCY;
     const convertedAmt = isForeign && convertToUSD(e.amount, expCur) != null ? getExpenseAmountUSD(e) : null;
+    const payerTag = (currentProfile === 'couple' && e.paidBy)
+      ? `<span class="payer-tag">${e.paidBy}</span>`
+      : '';
     div.innerHTML = `
       <div class="log-emoji">${cat.emoji}</div>
       <div class="log-info">
-        <div class="log-desc">${e.description}</div>
+        <div class="log-desc">${e.description}${payerTag}</div>
         <div class="log-meta">${cat.name} · ${dateStr}</div>
       </div>
       <div class="log-amount-col">
@@ -1815,13 +1935,41 @@ function addBotMessage(text, expenseData, alertMsg, saved) {
     const pill = document.createElement('div');
     pill.className = 'expense-pill';
     const expCurrency = expenseData.currency || BASE_CURRENCY;
+    const payerRow = expenseData.paidBy
+      ? `<span class="pill-label">pagó</span><span class="pill-val" style="color:var(--accent)">${expenseData.paidBy}</span>`
+      : '';
     pill.innerHTML = `
       <span class="pill-label">desc</span><span class="pill-val">${expenseData.description}</span>
       <span class="pill-label">amount</span><span class="pill-val green">${formatAmount(expenseData.amount, expCurrency)}</span>
       <span class="pill-label">category</span><span class="pill-val">${cat.emoji} ${cat.name}</span>
       <span class="pill-label">remaining</span><span class="pill-val ${remaining < 0 ? 'red' : ''}">${formatAmount(Math.abs(remaining), BASE_CURRENCY)}${remaining < 0 ? ' over' : ' left'}</span>
+      ${payerRow}
     `;
     wrapper.appendChild(pill);
+
+    // ¿Quién pagó? picker — shown in Pareja mode when payer was not auto-detected
+    if (currentProfile === 'couple' && !expenseData.paidBy) {
+      const picker = document.createElement('div');
+      picker.className = 'payer-picker';
+      picker.setAttribute('data-row', expenseData._excelRow || '');
+      const myLabel      = getPayerLabel('yo');
+      const partnerLabel = getPayerLabel('partner');
+      const excelRow     = expenseData._excelRow;
+      const desc         = expenseData.description;
+      const date         = expenseData.date;
+      picker.innerHTML = `<span class="payer-picker-label">¿Quién pagó?</span>`;
+      const btnMe = document.createElement('button');
+      btnMe.className = 'payer-btn';
+      btnMe.textContent = myLabel;
+      btnMe.addEventListener('click', () => selectPayer(desc, date, excelRow, myLabel));
+      const btnPartner = document.createElement('button');
+      btnPartner.className = 'payer-btn';
+      btnPartner.textContent = partnerLabel;
+      btnPartner.addEventListener('click', () => selectPayer(desc, date, excelRow, partnerLabel));
+      picker.appendChild(btnMe);
+      picker.appendChild(btnPartner);
+      wrapper.appendChild(picker);
+    }
   }
   if (alertMsg) {
     const alert = document.createElement('div');
@@ -1881,7 +2029,17 @@ async function handleSend() {
   const lower = text.toLowerCase();
   if (lower === 'summary' || lower === 'resumen' || lower.includes('how much') || lower.includes('budget')) {
     const summary = buildMonthlySummary(expenses, CATEGORIES, selectedMonth, selectedYear);
-    addBotMessage(formatSummaryMessage(summary));
+    let msg = formatSummaryMessage(summary);
+    if (currentProfile === 'couple') {
+      const payerTotals = buildPayerSummary(expenses, selectedMonth, selectedYear);
+      if (Object.keys(payerTotals).length > 0) {
+        msg += '\n\n👥 Por persona:';
+        Object.entries(payerTotals).forEach(([name, total]) => {
+          msg += `\n  ${name}: ${formatAmount(total, BASE_CURRENCY)}`;
+        });
+      }
+    }
+    addBotMessage(msg);
     return;
   }
   if (lower === 'help') {
@@ -1895,6 +2053,12 @@ async function handleSend() {
     return;
   }
 
+  // Auto-detect payer from text (only in Pareja profile)
+  if (currentProfile === 'couple') {
+    const payerKey = parsePaidBy(text, getPayerAliases());
+    parsed.paidBy = payerKey ? getPayerLabel(payerKey) : null;
+  }
+
   expenses.push(parsed);
   localStorage.setItem(sk('et_expenses_cache'), JSON.stringify(expenses));
   renderOverview();
@@ -1904,7 +2068,9 @@ async function handleSend() {
   const over = cat.spent > cat.budget;
   const alertMsg = over ? `You're ${formatAmount(cat.spent - cat.budget, BASE_CURRENCY)} over your ${cat.name} budget.` : null;
 
-  const saved = await saveExpenseToSheet(parsed);
+  const savedResult = await saveExpenseToSheet(parsed);
+  const saved = savedResult && savedResult.ok;
+  if (savedResult && savedResult.row) parsed._excelRow = savedResult.row;
   addBotMessage('Got it!', parsed, alertMsg, saved);
 }
 
@@ -1991,10 +2157,10 @@ async function saveExpenseToSheet(expense) {
 
     if (shouldWriteHeader(rowCount, existingFirstRow)) {
       // Sheet is empty — write all headers before the first expense row
-      const hRes = await apiFetch(`${wbBase}/worksheets/Sheet1/range(address='A1:F1')`, {
+      const hRes = await apiFetch(`${wbBase}/worksheets/Sheet1/range(address='A1:G1')`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [['Date', 'Description', 'Amount', 'Category', 'Currency', CONVERTED_USD_COLUMN_HEADER]] })
+        body: JSON.stringify({ values: [['Date', 'Description', 'Amount', 'Category', 'Currency', CONVERTED_USD_COLUMN_HEADER, 'Paid By']] })
       });
       if (!hRes || !hRes.ok) { console.error('Header write failed'); return false; }
       nextRow = 2;
@@ -2017,22 +2183,30 @@ async function saveExpenseToSheet(expense) {
             body: JSON.stringify({ values: [[CONVERTED_USD_COLUMN_HEADER]] })
           }).catch(() => {});
         }
+        if (existingFirstRow[6] !== 'Paid By') {
+          apiFetch(`${wbBase}/worksheets/Sheet1/range(address='G1:G1')`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values: [['Paid By']] })
+          }).catch(() => {});
+        }
       }
     }
 
     const expCurrency = expense.currency || BASE_CURRENCY;
     const convertedAmount = convertToUSD(expense.amount, expCurrency) ?? expense.amountUsd ?? expense.amount;
+    const paidByLabel = expense.paidBy ? String(expense.paidBy) : '';
     const updateRes = await apiFetch(
-      `${wbBase}/worksheets/Sheet1/range(address='A${nextRow}:F${nextRow}')`,
+      `${wbBase}/worksheets/Sheet1/range(address='A${nextRow}:G${nextRow}')`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [[dateStr, expense.description, expense.amount, cat.name, expCurrency, convertedAmount]] })
+        body: JSON.stringify({ values: [[dateStr, expense.description, expense.amount, cat.name, expCurrency, convertedAmount, paidByLabel]] })
       }
     );
     if (!updateRes) return false;
     if (!updateRes.ok) console.error('Row write failed', await updateRes.text());
-    return updateRes.ok;
+    return { ok: updateRes.ok, row: nextRow };
   } catch (e) {
     console.error('Sheet save error:', e);
     return false;
@@ -2189,7 +2363,8 @@ async function loadExpensesFromSheet() {
         ? r[4].trim().toUpperCase()
         : BASE_CURRENCY;
       const amount = parseFloat(r[2]) || 0;
-      return { date: formatExpenseDateStorage(d), description: r[1] || '', amount, category: catObj.key, currency, amountUsd: null };
+      const paidBy = (r[6] && typeof r[6] === 'string' && r[6].trim()) ? r[6].trim() : null;
+      return { date: formatExpenseDateStorage(d), description: r[1] || '', amount, category: catObj.key, currency, amountUsd: null, paidBy };
     }).filter(Boolean);
 
     recalculateAllAmountUsd();

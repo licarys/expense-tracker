@@ -352,6 +352,56 @@ function buildMonthlySummary(expenses, categories, month, year) {
 }
 
 // ---------------------------------------------------------------------------
+// Payer detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Detects who paid from free text using configurable alias lists.
+ * Pure function — no side effects.
+ *
+ * @param {string} text          - raw chat input
+ * @param {Array}  payerAliases  - [{ key: string, names: string[] }]
+ * @returns {string|null} the matched payer key, or null if no payer detected
+ */
+function parsePaidBy(text, payerAliases) {
+  if (!text || !payerAliases || payerAliases.length === 0) return null;
+  const lower = text.toLowerCase();
+  for (const payer of payerAliases) {
+    if (payer.names.some(n => {
+      const nl = n.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp('(?:^|[\\s,;.!?])' + nl + '(?:$|[\\s,;.!?])', 'i').test(lower);
+    })) {
+      return payer.key;
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Payer summary builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a per-payer spending total for a given month from a list of expenses.
+ * Pure function — no DOM access, no side effects.
+ *
+ * @param {Array}  expenses - expense objects with { date, amount, currency, paidBy }
+ * @param {number} month    - 0-indexed month (0 = January)
+ * @param {number} year     - full year (e.g. 2026)
+ * @returns {Object} map of { payerName: totalUsd } (expenses without paidBy are excluded)
+ */
+function buildPayerSummary(expenses, month, year) {
+  const totals = {};
+  expenses.forEach(e => {
+    if (!e.paidBy) return;
+    const d = parseExpenseDate(e.date);
+    if (!d || d.getMonth() !== month || d.getFullYear() !== year) return;
+    totals[e.paidBy] = (totals[e.paidBy] || 0) + getExpenseAmountUSD(e);
+  });
+  return totals;
+}
+
+// ---------------------------------------------------------------------------
 // Sheet header check
 // ---------------------------------------------------------------------------
 
