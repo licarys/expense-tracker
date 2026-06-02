@@ -252,6 +252,48 @@ function parseExpense(text) {
 }
 
 // ---------------------------------------------------------------------------
+// Monthly summary builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a structured monthly summary from a list of expenses and categories.
+ * Pure function — no DOM access, no side effects.
+ *
+ * @param {Array}  expenses   - expense objects with { date, amount, currency, category }
+ * @param {Array}  categories - category objects with { key, name, emoji, budget }
+ * @param {number} month      - 0-indexed month (0 = January)
+ * @param {number} year       - full year (e.g. 2026)
+ * @returns {{ monthLabel, month, year, total, totalBudget, remaining, expenseCount, categories }}
+ */
+function buildMonthlySummary(expenses, categories, month, year) {
+  const monthExpenses = expenses.filter(e => {
+    const d = parseExpenseDate(e.date);
+    return d && d.getMonth() === month && d.getFullYear() === year;
+  });
+
+  const catTotals = categories.map(c => {
+    const spent = monthExpenses
+      .filter(e => e.category === c.key)
+      .reduce((sum, e) => sum + getExpenseAmountUSD(e), 0);
+    return { key: c.key, name: c.name, emoji: c.emoji, budget: c.budget, spent };
+  });
+
+  const total = catTotals.reduce((sum, c) => sum + c.spent, 0);
+  const totalBudget = catTotals.reduce((sum, c) => sum + c.budget, 0);
+
+  return {
+    month,
+    year,
+    monthLabel: `${MONTH_NAMES[month]} ${year}`,
+    total,
+    totalBudget,
+    remaining: totalBudget - total,
+    expenseCount: monthExpenses.length,
+    categories: catTotals,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Sheet header check
 // ---------------------------------------------------------------------------
 

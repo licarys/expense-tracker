@@ -347,6 +347,83 @@ describe('shouldWriteHeader', () => {
   });
 });
 
+describe('buildMonthlySummary', () => {
+  // June 2026 = month index 5
+  const junExpenses = [
+    { date: '2026-06-01', amount: 30,  currency: 'USD', category: 'food'      },
+    { date: '2026-06-05', amount: 20,  currency: 'USD', category: 'transport' },
+    { date: '2026-06-10', amount: 15,  currency: 'USD', category: 'food'      },
+    { date: '2026-05-20', amount: 99,  currency: 'USD', category: 'food'      }, // May — must be excluded
+  ];
+
+  const cats = [
+    { key: 'food',      name: 'Food',      emoji: '🥗', budget: 300 },
+    { key: 'transport', name: 'Transport', emoji: '🚗', budget: 150 },
+    { key: 'other',     name: 'Other',     emoji: '📦', budget: 100 },
+  ];
+
+  it('monthLabel uses MONTH_NAMES short name', () => {
+    const s = buildMonthlySummary(junExpenses, cats, 5, 2026);
+    expect(s.monthLabel).toBe('Jun 2026');
+  });
+
+  it('only sums expenses from the target month', () => {
+    const s = buildMonthlySummary(junExpenses, cats, 5, 2026);
+    expect(s.total).toBeCloseTo(65, 2); // 30 + 20 + 15 (May 99 excluded)
+  });
+
+  it('returns 0 total for a month with no data', () => {
+    const s = buildMonthlySummary(junExpenses, cats, 0, 2026);
+    expect(s.total).toBe(0);
+  });
+
+  it('counts only expenses from the target month', () => {
+    const s = buildMonthlySummary(junExpenses, cats, 5, 2026);
+    expect(s.expenseCount).toBe(3);
+  });
+
+  it('expenseCount is 0 when month has no data', () => {
+    const s = buildMonthlySummary(junExpenses, cats, 0, 2026);
+    expect(s.expenseCount).toBe(0);
+  });
+
+  it('computes per-category spent correctly', () => {
+    const s = buildMonthlySummary(junExpenses, cats, 5, 2026);
+    const food = s.categories.find(c => c.key === 'food');
+    expect(food.spent).toBeCloseTo(45, 2); // 30 + 15
+  });
+
+  it('categories with no expenses have spent = 0', () => {
+    const s = buildMonthlySummary(junExpenses, cats, 5, 2026);
+    const other = s.categories.find(c => c.key === 'other');
+    expect(other.spent).toBe(0);
+  });
+
+  it('totalBudget is the sum of all category budgets', () => {
+    const s = buildMonthlySummary(junExpenses, cats, 5, 2026);
+    expect(s.totalBudget).toBe(550); // 300 + 150 + 100
+  });
+
+  it('remaining equals totalBudget minus total', () => {
+    const s = buildMonthlySummary(junExpenses, cats, 5, 2026);
+    expect(s.remaining).toBeCloseTo(s.totalBudget - s.total, 2);
+  });
+
+  it('remaining is negative when total spending exceeds total budget', () => {
+    // totalBudget for cats = 300+150+100 = 550; spend 600 to go over
+    const bigExpenses = [
+      { date: '2026-06-01', amount: 600, currency: 'USD', category: 'food' },
+    ];
+    const s = buildMonthlySummary(bigExpenses, cats, 5, 2026);
+    expect(s.remaining < 0).toBeTruthy();
+  });
+
+  it('output categories array has same length as input categories', () => {
+    const s = buildMonthlySummary(junExpenses, cats, 5, 2026);
+    expect(s.categories.length).toBe(cats.length);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Render results
 // ---------------------------------------------------------------------------

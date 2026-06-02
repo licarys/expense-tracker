@@ -1537,7 +1537,7 @@ function showApp() {
   }
 
   loadExpensesFromSheet();
-  addBotMessage("Hey! Ready to track your expenses 💸\n\nJust type something like:\n• Lunch with Ana $18 food\n• Netflix $15 entertainment\n• Uber to office $8 transport\n• Cena €20 food\n• Gasolina MXN 500 transport\n\nMultiple currencies supported — just include the symbol (€, £, ¥, R$…) or code (EUR, MXN, GBP…).\n\nOr type summary to see your budget.");
+  addBotMessage("Hey! Ready to track your expenses 💸\n\nJust type something like:\n• Lunch with Ana $18 food\n• Netflix $15 entertainment\n• Uber to office $8 transport\n• Cena €20 food\n• Gasolina MXN 500 transport\n\nMultiple currencies supported — just include the symbol (€, £, ¥, R$…) or code (EUR, MXN, GBP…).\n\nType summary (or resumen) to see your monthly breakdown.");
 }
 
 function updateGreeting() {
@@ -1661,6 +1661,35 @@ function renderLog() {
   });
 }
 
+function formatSummaryMessage(summary) {
+  const totalPct = summary.totalBudget > 0
+    ? Math.round((summary.total / summary.totalBudget) * 100)
+    : 0;
+
+  const expWord = summary.expenseCount === 1 ? 'expense' : 'expenses';
+  const lines = [];
+
+  lines.push(`📅 ${summary.monthLabel} — ${summary.expenseCount} ${expWord}`);
+  lines.push('');
+  lines.push(`💰 Spent:  ${formatAmount(summary.total, BASE_CURRENCY)}  (${totalPct}% of budget)`);
+
+  const remLabel = summary.remaining < 0
+    ? `⚠️ Over budget by ${formatAmount(Math.abs(summary.remaining), BASE_CURRENCY)}`
+    : `✅ ${formatAmount(summary.remaining, BASE_CURRENCY)} remaining`;
+  lines.push(remLabel);
+
+  lines.push('');
+
+  summary.categories.forEach(c => {
+    const catPct = c.budget > 0 ? Math.round((c.spent / c.budget) * 100) : 0;
+    const over = c.spent > c.budget;
+    const flag = over ? ' ⚠️' : '';
+    lines.push(`${c.emoji} ${c.name}: ${formatAmount(c.spent, BASE_CURRENCY)} / ${formatAmount(c.budget, BASE_CURRENCY)} (${catPct}%)${flag}`);
+  });
+
+  return lines.join('\n');
+}
+
 function addBotMessage(text, expenseData, alertMsg, saved) {
   const msgs = document.getElementById('messages');
   const wrapper = document.createElement('div');
@@ -1737,13 +1766,13 @@ async function handleSend() {
   removeTyping();
 
   const lower = text.toLowerCase();
-  if (lower === 'summary' || lower.includes('how much') || lower.includes('budget')) {
-    const lines = CATEGORIES.map(c => `${c.emoji} ${c.name}: ${formatAmount(c.spent, BASE_CURRENCY)} / ${formatAmount(c.budget, BASE_CURRENCY)}`).join('\n');
-    addBotMessage('Here\'s your month so far:\n\n' + lines);
+  if (lower === 'summary' || lower === 'resumen' || lower.includes('how much') || lower.includes('budget')) {
+    const summary = buildMonthlySummary(expenses, CATEGORIES, selectedMonth, selectedYear);
+    addBotMessage(formatSummaryMessage(summary));
     return;
   }
   if (lower === 'help') {
-    addBotMessage('Examples:\n• Lunch $12 food\n• Netflix $15 entertainment\n• Uber $8 transport\n• Gym $40 health\n• Cena €20 food\n• Gasolina MXN 500 transport\n• Coffee £3.50 food\n\nMultiple currencies: use the symbol (€ £ ¥ R$…) or code (EUR MXN GBP…).\n\nOr type summary to see all budgets.');
+    addBotMessage('Examples:\n• Lunch $12 food\n• Netflix $15 entertainment\n• Uber $8 transport\n• Gym $40 health\n• Cena €20 food\n• Gasolina MXN 500 transport\n• Coffee £3.50 food\n\nMultiple currencies: use the symbol (€ £ ¥ R$…) or code (EUR MXN GBP…).\n\nType summary or resumen for a monthly breakdown.');
     return;
   }
 
