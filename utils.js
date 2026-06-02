@@ -252,6 +252,24 @@ function parseExpense(text) {
 }
 
 // ---------------------------------------------------------------------------
+// Category filter
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the subset of categories whose name contains the query string.
+ * Pure function — no side effects.
+ *
+ * @param {Array}  categories - array of category objects with at least { name }
+ * @param {string} query      - search string (empty / null → return all)
+ * @returns {Array} filtered array (original objects, not copies)
+ */
+function filterCategories(categories, query) {
+  if (!query || !query.trim()) return categories;
+  const q = query.trim().toLowerCase();
+  return categories.filter(c => c.name.toLowerCase().includes(q));
+}
+
+// ---------------------------------------------------------------------------
 // Monthly summary builder
 // ---------------------------------------------------------------------------
 
