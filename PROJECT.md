@@ -86,11 +86,11 @@ Sheet: `Sheet1`
 
 | Column A | Column B | Column C | Column D | Column E | Column F |
 |---|---|---|---|---|---|
-| Date | Description | Amount | Category | Currency | Amount (USD) |
+| Date | Description | Amount | Category | Currency | Converted to USD |
 
 - **Amount (C):** Original amount in the currency used when logging (e.g. 500 in córdobas).
 - **Currency (E):** ISO code from input (`C$` → NIO, `MXN`, …) or `USD` when none detected.
-- **Amount (USD) (F):** Value converted to USD at save time. Use this column in Excel for sums (`=SUM(F:F)`). The app uses the same field for budgets and overview totals.
+- **Converted to USD (F):** Same expense converted to US dollars at save time (using your exchange rates). Use this column in Excel for sums (`=SUM(F:F)`). The app uses it for budgets and overview totals.
 
 One row per expense. Header row written on first use; older files get missing column headers patched on the next write.
 
@@ -125,7 +125,7 @@ One row per expense. Header row written on first use; older files get missing co
 - [ ] **Pareja — quién pagó:** registrar qué persona pagó cada gasto (útil tanto para parejas como para usuarios individuales que quieran rastrear el pagador)
 - [ ] **Separar JS del HTML:** extraer el `<script>` a un archivo `app.js` independiente para mejorar mantenibilidad
 - [ ] **Búsqueda de categorías:** agregar un campo de búsqueda/filtro al selector de categorías, ya que la lista crece con categorías personalizadas
-- [ ] **Bug — fecha "Dec 1969":** algunas fechas se parsean incorrectamente como epoch 0; investigar y corregir el manejo de fechas en `loadExpensesFromSheet`
+- [x] **Bug — fecha "Dec 1969":** Excel serial dates from Graph API were passed to `new Date()` as milliseconds; fixed with `parseExpenseDate()` in `loadExpensesFromSheet`
 - [x] **Conversión de monedas:** tasas manuales en Settings, totales convertidos en overview, columna F en Excel, migración automática de gastos viejos mal etiquetados como USD (ver Currency architecture)
 
 ---

@@ -784,6 +784,98 @@ let selectedYear  = new Date().getFullYear();
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+// Excel serial days from 1899-12-30 → Unix epoch (1970-01-01)
+const EXCEL_EPOCH_OFFSET = 25569;
+
+function isValidExpenseDate(d) {
+  return d instanceof Date && !isNaN(d.getTime()) &&
+    d.getFullYear() >= 1972 && d.getFullYear() <= 2100;
+}
+
+// Calendar date in local timezone (noon avoids DST edge cases)
+function toLocalCalendarDate(year, monthIndex, day) {
+  const d = new Date(year, monthIndex, day, 12, 0, 0, 0);
+  return isValidExpenseDate(d) ? d : null;
+}
+
+function formatExpenseDateStorage(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function excelSerialToDate(serial) {
+  const utcMs = Math.round((serial - EXCEL_EPOCH_OFFSET) * 86400 * 1000);
+  const utc = new Date(utcMs);
+  return toLocalCalendarDate(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+}
+
+// Handles YYYY-MM-DD, ISO datetimes, US date strings, and Excel serial numbers
+function parseExpenseDate(value) {
+  if (value == null || value === '') return null;
+  if (value instanceof Date) {
+    return isValidExpenseDate(value)
+      ? toLocalCalendarDate(value.getFullYear(), value.getMonth(), value.getDate())
+      : null;
+  }
+  if (typeof value === 'number' && !isNaN(value)) {
+    if (value > 10000) return excelSerialToDate(value);
+    return null;
+  }
+  const str = String(value).trim();
+  if (!str) return null;
+  if (/^\d+(\.\d+)?$/.test(str)) {
+    const n = parseFloat(str);
+    if (n > 10000) return excelSerialToDate(n);
+  }
+  const isoDate = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDate) {
+    return toLocalCalendarDate(
+      parseInt(isoDate[1], 10),
+      parseInt(isoDate[2], 10) - 1,
+      parseInt(isoDate[3], 10)
+    );
+  }
+  const d = new Date(str);
+  if (!isValidExpenseDate(d)) return null;
+  return toLocalCalendarDate(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function getExpenseDate(expense) {
+  return parseExpenseDate(expense.date);
+}
+
+function normalizeSelectedMonth() {
+  if (!Number.isFinite(selectedYear) || selectedYear < 1972 || selectedYear > 2100 ||
+      !Number.isFinite(selectedMonth) || selectedMonth < 0 || selectedMonth > 11) {
+    const now = new Date();
+    selectedMonth = now.getMonth();
+    selectedYear = now.getFullYear();
+  }
+}
+
+function jumpToLatestExpenseMonthIfNeeded() {
+  const currentHasData = expenses.some(e => {
+    const d = getExpenseDate(e);
+    return d && d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+  });
+  if (currentHasData || expenses.length === 0) {
+    normalizeSelectedMonth();
+    return;
+  }
+  let latest = null;
+  expenses.forEach(e => {
+    const d = getExpenseDate(e);
+    if (d && (!latest || d > latest)) latest = d;
+  });
+  if (latest) {
+    selectedMonth = latest.getMonth();
+    selectedYear = latest.getFullYear();
+  }
+  normalizeSelectedMonth();
+}
+
 const CURRENCIES = [
   { code:'USD', name:'US Dollar'           },
   { code:'EUR', name:'Euro'                },
@@ -833,30 +925,89 @@ const CURRENCY_CODE_RE = /\b(USD|EUR|GBP|JPY|MXN|CAD|AUD|BRL|CHF|KRW|INR|ILS|ARS
 
 // Base currency for budgets, totals, and column F in Excel
 const BASE_CURRENCY = 'USD';
+const CONVERTED_USD_COLUMN_HEADER = 'Converted to USD';
 
 function getExchangeRates() {
-  try { return JSON.parse(localStorage.getItem('et_exchange_rates') || '{}'); } catch(e) { return {}; }
+  try {
+    const settings = JSON.parse(localStorage.getItem(sk('et_settings')) || '{}');
+    if (settings.exchangeRates && Object.keys(settings.exchangeRates).length > 0) {
+      return settings.exchangeRates;
+    }
+    return JSON.parse(localStorage.getItem('et_exchange_rates') || '{}');
+  } catch(e) { return {}; }
 }
 function saveExchangeRates(rates) {
   localStorage.setItem('et_exchange_rates', JSON.stringify(rates));
+  try {
+    const settings = JSON.parse(localStorage.getItem(sk('et_settings')) || '{}');
+    settings.exchangeRates = rates;
+    localStorage.setItem(sk('et_settings'), JSON.stringify(settings));
+  } catch(e) { /* ignore */ }
 }
 // Rates: { NIO: 36.5 } means 1 USD = 36.5 NIO → amountUsd = amount / rate
 function convertToUSD(amount, fromCurrency) {
   if (!fromCurrency || fromCurrency === BASE_CURRENCY) return amount;
   const rates = getExchangeRates();
   const rate = rates[fromCurrency];
-  return (rate && rate > 0) ? amount / rate : amount;
+  if (!rate || rate <= 0) return null;
+  return amount / rate;
 }
 
 function getExpenseAmountUSD(e) {
-  if (e.amountUsd != null && !isNaN(e.amountUsd)) return e.amountUsd;
-  return convertToUSD(e.amount, e.currency || BASE_CURRENCY);
+  const cur = e.currency || BASE_CURRENCY;
+  const usd = convertToUSD(e.amount, cur);
+  if (usd != null) return usd;
+  return cur === BASE_CURRENCY ? e.amount : 0;
 }
 
 function recalculateAllAmountUsd() {
   expenses.forEach(e => {
-    e.amountUsd = convertToUSD(e.amount, e.currency || BASE_CURRENCY);
+    const cur = e.currency || BASE_CURRENCY;
+    const usd = convertToUSD(e.amount, cur);
+    e.amountUsd = usd != null ? usd : (cur === BASE_CURRENCY ? e.amount : null);
   });
+}
+
+async function syncAmountUsdColumnToExcel() {
+  if (!accessToken) return;
+  try {
+    const wbBase = await getWorkbookBase();
+    if (!wbBase) return;
+    const authHeader = { 'Authorization': 'Bearer ' + accessToken };
+    const rangeRes = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`, { headers: authHeader });
+    if (!rangeRes.ok) return;
+    const rows = (await rangeRes.json()).values || [];
+    const patchPromises = [];
+    if (rows.length > 0 && rows[0][0] === 'Date' && rows[0][5] !== CONVERTED_USD_COLUMN_HEADER) {
+      patchPromises.push(
+        fetch(`${wbBase}/worksheets/Sheet1/range(address='F1:F1')`, {
+          method: 'PATCH',
+          headers: { ...authHeader, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: [[CONVERTED_USD_COLUMN_HEADER]] })
+        })
+      );
+    }
+    rows.forEach((row, idx) => {
+      if (idx === 0) return;
+      const amount = parseFloat(row[2]) || 0;
+      const currency = (row[4] && typeof row[4] === 'string' && row[4].trim())
+        ? row[4].trim().toUpperCase()
+        : BASE_CURRENCY;
+      const amountUsd = convertToUSD(amount, currency);
+      if (amountUsd == null) return;
+      const excelRow = idx + 1;
+      patchPromises.push(
+        fetch(`${wbBase}/worksheets/Sheet1/range(address='F${excelRow}:F${excelRow}')`, {
+          method: 'PATCH',
+          headers: { ...authHeader, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: [[amountUsd]] })
+        })
+      );
+    });
+    await Promise.all(patchPromises);
+  } catch (err) {
+    console.error('syncAmountUsdColumnToExcel error:', err);
+  }
 }
 
 function formatAmount(amount, currencyCode) {
@@ -949,15 +1100,20 @@ async function migrateMislabeledExpensesOnLoad() {
           );
         });
 
-        // Backfill column F when missing so Categories SUMIF uses USD amounts
+        // Backfill or fix column F (e.g. 150 NIO wrongly stored as 150 USD)
         rows.forEach((row, idx) => {
           if (idx === 0) return;
-          if (row[5] != null && row[5] !== '') return;
           const currency = (row[4] && typeof row[4] === 'string' && row[4].trim())
             ? row[4].trim().toUpperCase()
             : BASE_CURRENCY;
           const amount = parseFloat(row[2]) || 0;
+          const existingF = row[5] != null && row[5] !== '' ? parseFloat(row[5]) : null;
           const amountUsd = convertToUSD(amount, currency);
+          if (amountUsd == null) return;
+          const looksUnconverted = currency !== BASE_CURRENCY &&
+            existingF != null && Math.abs(existingF - amount) < 0.01;
+          const needsPatch = existingF == null || isNaN(existingF) || looksUnconverted;
+          if (!needsPatch) return;
           const excelRow = idx + 1;
           const patchE = !row[4] || !String(row[4]).trim();
           const range = patchE ? `E${excelRow}:F${excelRow}` : `F${excelRow}:F${excelRow}`;
@@ -1278,11 +1434,12 @@ function loadSettings() {
     const s = JSON.parse(saved);
     if (s.budgets) CATEGORIES.forEach(c => { if (s.budgets[c.key]) c.budget = s.budgets[c.key]; });
     if (s.filename) document.getElementById('setting-filename').value = s.filename;
+    if (s.exchangeRates) saveExchangeRates(s.exchangeRates);
   }
   renderExchangeRateRows();
 }
 
-function saveSettings() {
+async function saveSettings() {
   const budgets = {};
   CATEGORIES.forEach(c => {
     const inp = document.getElementById('cat-budget-' + c.key);
@@ -1306,10 +1463,10 @@ function saveSettings() {
   recalculateAllAmountUsd();
   localStorage.setItem(sk('et_expenses_cache'), JSON.stringify(expenses));
 
-  localStorage.setItem(sk('et_settings'), JSON.stringify({ budgets, filename }));
+  localStorage.setItem(sk('et_settings'), JSON.stringify({ budgets, filename, exchangeRates: rates }));
 
-  // Persist all categories + budgets to OneDrive sheet (source of truth across devices)
-  saveCategoriesToSheet();
+  await syncAmountUsdColumnToExcel();
+  await saveCategoriesToSheet();
 
   renderOverview();
   document.getElementById('sync-status').textContent = '✓ Settings saved';
@@ -1542,17 +1699,7 @@ function showApp() {
   if (cached) {
     try {
       expenses = JSON.parse(cached);
-      // Jump to most recent month with data if current month is empty
-      const hasData = expenses.some(e => {
-        const d = new Date(e.date);
-        return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
-      });
-      if (!hasData && expenses.length > 0) {
-        const latest = expenses.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b);
-        const d = new Date(latest.date);
-        selectedMonth = d.getMonth();
-        selectedYear  = d.getFullYear();
-      }
+      jumpToLatestExpenseMonthIfNeeded();
       renderOverview();
       renderLog();
       if (!accessToken) void migrateMislabeledExpensesOnLoad();
@@ -1619,14 +1766,14 @@ function parseExpense(text) {
   description = description.replace(/,\s*$/, '').replace(/\s+/g, ' ').trim();
   if (description.length < 2) description = text.trim();
 
-  const amountUsd = convertToUSD(amount, currency);
-  return { description, amount, currency, amountUsd, category, date: new Date().toISOString() };
+  const amountUsd = convertToUSD(amount, currency) ?? (currency === BASE_CURRENCY ? amount : null);
+  return { description, amount, currency, amountUsd, category, date: formatExpenseDateStorage(new Date()) };
 }
 
 function renderOverview() {
   const monthExpenses = expenses.filter(e => {
-    const d = new Date(e.date);
-    return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+    const d = getExpenseDate(e);
+    return d && d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
   });
   CATEGORIES.forEach(c => {
     c.spent = monthExpenses
@@ -1688,24 +1835,28 @@ function renderOverview() {
 function renderLog() {
   const list = document.getElementById('log-list');
   const monthExpenses = expenses.filter(e => {
-    const d = new Date(e.date);
-    return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+    const d = getExpenseDate(e);
+    return d && d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
   });
   if (monthExpenses.length === 0) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div>No expenses for ${MONTH_NAMES[selectedMonth]} ${selectedYear}.</div>`;
     return;
   }
-  const sorted = [...monthExpenses].sort((a,b) => new Date(b.date) - new Date(a.date));
+  const sorted = [...monthExpenses].sort((a, b) => {
+    const da = getExpenseDate(a)?.getTime() || 0;
+    const db = getExpenseDate(b)?.getTime() || 0;
+    return db - da;
+  });
   list.innerHTML = '';
   sorted.forEach(e => {
     const cat = CATEGORIES.find(c => c.key === e.category) || CATEGORIES[5];
-    const d = new Date(e.date);
+    const d = getExpenseDate(e) || new Date();
     const dateStr = d.toLocaleDateString('en-US', { month:'short', day:'numeric' }) + ' · ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
     const div = document.createElement('div');
     div.className = 'log-item';
     const expCur = e.currency || BASE_CURRENCY;
     const isForeign = expCur !== BASE_CURRENCY;
-    const convertedAmt = isForeign ? getExpenseAmountUSD(e) : null;
+    const convertedAmt = isForeign && convertToUSD(e.amount, expCur) != null ? getExpenseAmountUSD(e) : null;
     div.innerHTML = `
       <div class="log-emoji">${cat.emoji}</div>
       <div class="log-info">
@@ -1898,7 +2049,7 @@ async function saveExpenseToSheet(expense) {
     if (!wbBase) return false;
 
     const cat = CATEGORIES.find(c => c.key === expense.category) || CATEGORIES[5];
-    const dateStr = new Date(expense.date).toLocaleDateString('en-US');
+    const dateStr = formatExpenseDateStorage(parseExpenseDate(expense.date) || new Date());
 
     const rangeRes = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`, { headers: authHeader });
     let nextRow = 2;
@@ -1915,18 +2066,16 @@ async function saveExpenseToSheet(expense) {
       }
     }
 
-    const convertedHeader = 'Amount (USD)';
-
     if (needsHeader) {
       const hRes = await fetch(`${wbBase}/worksheets/Sheet1/range(address='A1:F1')`, {
         method: 'PATCH',
         headers: { ...authHeader, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [['Date', 'Description', 'Amount', 'Category', 'Currency', convertedHeader]] })
+        body: JSON.stringify({ values: [['Date', 'Description', 'Amount', 'Category', 'Currency', CONVERTED_USD_COLUMN_HEADER]] })
       });
       if (!hRes.ok) { console.error('Header write failed', await hRes.text()); return false; }
       nextRow = 2;
     } else {
-      // Silently patch any missing headers for older files
+      // Silently patch any missing or outdated headers for older files
       if (existingFirstRow[4] !== 'Currency') {
         await fetch(`${wbBase}/worksheets/Sheet1/range(address='E1:E1')`, {
           method: 'PATCH',
@@ -1934,17 +2083,17 @@ async function saveExpenseToSheet(expense) {
           body: JSON.stringify({ values: [['Currency']] })
         }).catch(() => {});
       }
-      if (!existingFirstRow[5]) {
+      if (existingFirstRow[5] !== CONVERTED_USD_COLUMN_HEADER) {
         await fetch(`${wbBase}/worksheets/Sheet1/range(address='F1:F1')`, {
           method: 'PATCH',
           headers: { ...authHeader, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: [[convertedHeader]] })
+          body: JSON.stringify({ values: [[CONVERTED_USD_COLUMN_HEADER]] })
         }).catch(() => {});
       }
     }
 
     const expCurrency = expense.currency || BASE_CURRENCY;
-    const convertedAmount = expense.amountUsd != null ? expense.amountUsd : convertToUSD(expense.amount, expCurrency);
+    const convertedAmount = convertToUSD(expense.amount, expCurrency) ?? expense.amountUsd ?? expense.amount;
     const updateRes = await fetch(
       `${wbBase}/worksheets/Sheet1/range(address='A${nextRow}:F${nextRow}')`,
       {
@@ -2106,33 +2255,25 @@ async function loadExpensesFromSheet() {
     const data = await res.json();
     const rows = data.values || [];
     expenses = rows.slice(1).filter(r => r[0] && r[2]).map(r => {
-      const d = new Date(r[0]);
+      const d = parseExpenseDate(r[0]);
+      if (!d) return null;
       const catObj = resolveOrCreateCategory(r[3] || '');
       const currency = (r[4] && typeof r[4] === 'string' && r[4].trim().length > 0)
         ? r[4].trim().toUpperCase()
         : BASE_CURRENCY;
       const amount = parseFloat(r[2]) || 0;
-      const amountUsd = (r[5] != null && r[5] !== '')
-        ? parseFloat(r[5])
-        : convertToUSD(amount, currency);
-      return { date: d.toISOString(), description: r[1] || '', amount, category: catObj.key, currency, amountUsd };
-    });
+      return { date: formatExpenseDateStorage(d), description: r[1] || '', amount, category: catObj.key, currency, amountUsd: null };
+    }).filter(Boolean);
 
+    recalculateAllAmountUsd();
     localStorage.setItem(sk('et_expenses_cache'), JSON.stringify(expenses));
     await migrateMislabeledExpensesOnLoad();
-
-    // If the currently selected month has no expenses, jump to the most recent month
-    // that does — so the user always sees their actual data, not an empty month.
-    const currentMonthHasData = expenses.some(e => {
-      const d = new Date(e.date);
-      return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
-    });
-    if (!currentMonthHasData && expenses.length > 0) {
-      const latest = expenses.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b);
-      const d = new Date(latest.date);
-      selectedMonth = d.getMonth();
-      selectedYear  = d.getFullYear();
+    recalculateAllAmountUsd();
+    if (Object.keys(getExchangeRates()).length > 0) {
+      await syncAmountUsdColumnToExcel();
     }
+
+    jumpToLatestExpenseMonthIfNeeded();
 
     renderOverview();
     renderLog();
