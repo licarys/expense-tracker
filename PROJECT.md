@@ -50,6 +50,7 @@ No npm. No framework. No backend. No paid services.
 - **Profile badge** — Visible in header, tap to switch profiles
 - Chat interface — type natural language to log expenses
 - Natural language parser — extracts description, amount, and category from free text (regex-based, local, no AI API)
+- **Summary command** — type `summary` or `resumen` in chat to get a formatted monthly breakdown: total spent vs budget, remaining, and per-category rows with % and over-budget warnings
 - Budget tracking — 6 default categories with configurable monthly limits per profile
 - Progress bars — visual spending vs budget per category
 - Over-budget alerts — warning when a category exceeds its limit
@@ -118,7 +119,7 @@ One row per expense. Header row written on first use; older files get missing co
 
 - [ ] Header row check — only write Date/Description/Amount/Category headers if the sheet is empty
 - [ ] Natural language parser needs improvement for edge cases (`"spent 20 on lunch"`, `"paid $8.5 uber"`)
-- [ ] Summary command in chat — formatted monthly breakdown
+- [x] Summary command in chat — formatted monthly breakdown
 - [ ] 401 handling — detect expired token mid-session and trigger refresh or re-login
 - [ ] Partner sharing link scope — currently uses `anonymous` edit link; evaluate whether `organization` scope is more appropriate
 - [ ] Monthly data scope — currently filters to current month only on load
@@ -160,6 +161,7 @@ No npm, no build step. The test suite is a standalone HTML file that imports `ut
 - `formatExpenseDateStorage` — date → storage string
 - `isValidExpenseDate` — date guard
 - `formatAmount` — Intl currency display
+- `buildMonthlySummary` — structured monthly breakdown (totals, per-category spent, remaining)
 
 ---
 
@@ -211,7 +213,7 @@ For local dev, add `http://localhost:8080` as an additional redirect URI in the 
 - ✅ Hooks & skills model-agnostic (Claude / Codex / Cursor) — `agent_message` only, behavior-described, no model syntax
 - Stable OneDrive sync
 - Reliable natural language parsing
-- Monthly budget summaries in chat
+- ✅ Monthly budget summaries in chat
 
 ### V2 (if habit is validated)
 - Migrate to Laravel + Vue
