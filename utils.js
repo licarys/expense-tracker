@@ -250,3 +250,13 @@ function parseExpense(text) {
   const amountUsd = convertToUSD(amount, currency) ?? (currency === BASE_CURRENCY ? amount : null);
   return { description, amount, currency, amountUsd, category, date: formatExpenseDateStorage(new Date()) };
 }
+
+// ---------------------------------------------------------------------------
+// Sheet header check
+// ---------------------------------------------------------------------------
+
+// Returns true only when the sheet is completely empty and headers must be written.
+// Headers are never written over existing data — even if row 1 lacks a "Date" cell.
+function shouldWriteHeader(rowCount, existingFirstRow) {
+  return !rowCount || rowCount === 0;
+}

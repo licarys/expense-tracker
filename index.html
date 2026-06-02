@@ -1842,20 +1842,17 @@ async function saveExpenseToSheet(expense) {
 
     const rangeRes = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`, { headers: authHeader });
     let nextRow = 2;
-    let needsHeader = true;
     let existingFirstRow = [];
+    let rowCount = 0;
 
     if (rangeRes.ok) {
       const rangeData = await rangeRes.json();
-      const rowCount = rangeData.rowCount || 0;
+      rowCount = rangeData.rowCount || 0;
       existingFirstRow = (rangeData.values || [])[0] || [];
-      if (rowCount > 0 && existingFirstRow[0] === 'Date') {
-        needsHeader = false;
-        nextRow = rowCount + 1;
-      }
     }
 
-    if (needsHeader) {
+    if (shouldWriteHeader(rowCount, existingFirstRow)) {
+      // Sheet is empty — write all headers before the first expense row
       const hRes = await fetch(`${wbBase}/worksheets/Sheet1/range(address='A1:F1')`, {
         method: 'PATCH',
         headers: { ...authHeader, 'Content-Type': 'application/json' },
@@ -1864,20 +1861,24 @@ async function saveExpenseToSheet(expense) {
       if (!hRes.ok) { console.error('Header write failed', await hRes.text()); return false; }
       nextRow = 2;
     } else {
-      // Silently patch any missing or outdated headers for older files
-      if (existingFirstRow[4] !== 'Currency') {
-        await fetch(`${wbBase}/worksheets/Sheet1/range(address='E1:E1')`, {
-          method: 'PATCH',
-          headers: { ...authHeader, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: [['Currency']] })
-        }).catch(() => {});
-      }
-      if (existingFirstRow[5] !== CONVERTED_USD_COLUMN_HEADER) {
-        await fetch(`${wbBase}/worksheets/Sheet1/range(address='F1:F1')`, {
-          method: 'PATCH',
-          headers: { ...authHeader, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: [[CONVERTED_USD_COLUMN_HEADER]] })
-        }).catch(() => {});
+      // Sheet already has data — never overwrite row 1
+      nextRow = rowCount + 1;
+      // Silently patch any missing or outdated column headers for older files
+      if (existingFirstRow[0] === 'Date') {
+        if (existingFirstRow[4] !== 'Currency') {
+          await fetch(`${wbBase}/worksheets/Sheet1/range(address='E1:E1')`, {
+            method: 'PATCH',
+            headers: { ...authHeader, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values: [['Currency']] })
+          }).catch(() => {});
+        }
+        if (existingFirstRow[5] !== CONVERTED_USD_COLUMN_HEADER) {
+          await fetch(`${wbBase}/worksheets/Sheet1/range(address='F1:F1')`, {
+            method: 'PATCH',
+            headers: { ...authHeader, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values: [[CONVERTED_USD_COLUMN_HEADER]] })
+          }).catch(() => {});
+        }
       }
     }
 
