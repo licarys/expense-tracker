@@ -120,7 +120,7 @@ One row per expense. Header row written on first use; older files get missing co
 - [ ] Header row check — only write Date/Description/Amount/Category headers if the sheet is empty
 - [ ] Natural language parser needs improvement for edge cases (`"spent 20 on lunch"`, `"paid $8.5 uber"`)
 - [x] Summary command in chat — formatted monthly breakdown
-- [ ] 401 handling — detect expired token mid-session and trigger refresh or re-login
+- [x] 401 handling — `apiFetch` wrapper: silent refresh → retry → `handleAuthExpired()` (re-login screen with message); covers all Graph API calls
 - [ ] Partner sharing link scope — currently uses `anonymous` edit link; evaluate whether `organization` scope is more appropriate
 - [ ] Monthly data scope — currently filters to current month only on load
 - [ ] **Pareja — quién pagó:** registrar qué persona pagó cada gasto (útil tanto para parejas como para usuarios individuales que quieran rastrear el pagador)
@@ -163,6 +163,7 @@ No npm, no build step. The test suite is a standalone HTML file that imports `ut
 - `formatAmount` — Intl currency display
 - `buildMonthlySummary` — structured monthly breakdown (totals, per-category spent, remaining)
 - `filterCategories` — case-insensitive partial name filter for category lists
+- `isTokenExpired` — checks token expiry timestamp against current time (testable with optional `nowMs`)
 
 ---
 
