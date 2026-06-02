@@ -1,0 +1,57 @@
+---
+description: TDD workflow for this project — write tests first in tests.html, then implement in utils.js
+alwaysApply: true
+---
+
+# Test-Driven Development
+
+This project follows TDD. Every new function or behavior change must go through the Red → Green → Refactor cycle.
+
+## Workflow
+
+1. **Red** — write a failing test in `tests.html` before touching any implementation code.
+2. **Green** — write the minimal code in `utils.js` (or `index.html` for DOM logic) to make the test pass.
+3. **Refactor** — clean up without breaking the tests.
+
+Never write implementation code for a feature that doesn't have a test first.
+
+## Test file: `tests.html`
+
+The test runner is a zero-dependency in-browser suite. Run it at:
+
+```
+http://localhost:8080/tests.html
+```
+
+### Adding a test
+
+```js
+test('parseExpense handles "spent 20 on lunch"', () => {
+  const result = parseExpense('spent 20 on lunch');
+  assertEqual(result.amount, 20);
+  assertEqual(result.category, 'food');
+});
+```
+
+Use the helpers already defined in `tests.html`:
+- `test(name, fn)` — registers and runs a test case
+- `assertEqual(actual, expected)` — strict equality
+- `assertContains(str, substring)` — substring check
+- `assertTruthy(value)` / `assertFalsy(value)`
+
+## What lives where
+
+| Code | File |
+|---|---|
+| Pure functions (parser, dates, currency, categories) | `utils.js` |
+| DOM-dependent logic, auth, Graph API calls | `index.html` `<script>` |
+| All unit tests | `tests.html` |
+
+Only functions in `utils.js` are unit-testable (imported via `<script src="utils.js">`). DOM logic in `index.html` is integration territory — cover it manually or extract it to `utils.js` first.
+
+## Checklist before marking a task done
+
+- [ ] Test written and was failing before implementation
+- [ ] Test passes now
+- [ ] No existing tests are broken (`tests.html` shows all green)
+- [ ] `utils.js` functions remain pure (no side effects, no DOM access)
