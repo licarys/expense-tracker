@@ -44,7 +44,7 @@ No npm. No framework. No backend. No paid services.
 ## Features (current)
 
 - **Multi-profile support** — Personal and Pareja profiles, each with its own Microsoft account, tokens, settings, and OneDrive file
-- **Couple sharing** — Pareja owner generates an OneDrive sharing link; partner logs in with their own Microsoft account and uses the link to access the same shared file
+- **Couple sharing** — Pareja owner invites partner by Microsoft email via the Graph API `invite` endpoint (`requireSignIn: true`); partner signs in and the app auto-discovers the shared file via `GET /me/drive/sharedWithMe` — no anonymous links
 - **PKCE auth** — Secure OAuth 2.0 authorization code flow with PKCE; refresh tokens handled automatically
 - **Sign out** — Per-profile sign out from Settings; returns to profile selector
 - **Profile badge** — Visible in header, tap to switch profiles
@@ -56,7 +56,7 @@ No npm. No framework. No backend. No paid services.
 - Over-budget alerts — warning when a category exceeds its limit
 - Expense history — chronological list of all logged expenses
 - OneDrive sync — each expense saved as a row in the profile's Excel file in OneDrive
-- Settings panel — adjust monthly budgets and Excel filename; partner link generator for couple owners
+- Settings panel — adjust monthly budgets and Excel filename; owner can invite partner by email, partner can re-discover the shared file
 - Mobile-first dark UI — safe area support, add-to-home-screen ready
 
 ---
@@ -81,7 +81,7 @@ All budgets are configurable in the settings panel and saved to localStorage.
 | Profile | Default file | Location |
 |---|---|---|
 | Personal | `expenses.xlsx` | Owner's OneDrive root |
-| Pareja | `expenses-pareja.xlsx` | Owner's OneDrive root (partner accesses via sharing link) |
+| Pareja | `expenses-pareja.xlsx` | Owner's OneDrive root (partner accesses via invite; discovered via sharedWithMe) |
 
 Sheet: `Sheet1`
 
@@ -121,7 +121,7 @@ One row per expense. Header row written on first use; older files get missing co
 - [ ] Natural language parser needs improvement for edge cases (`"spent 20 on lunch"`, `"paid $8.5 uber"`)
 - [x] Summary command in chat — formatted monthly breakdown
 - [x] 401 handling — `apiFetch` wrapper: silent refresh → retry → `handleAuthExpired()` (re-login screen with message); covers all Graph API calls
-- [ ] Partner sharing link scope — currently uses `anonymous` edit link; evaluate whether `organization` scope is more appropriate
+- [x] Partner sharing link scope — replaced `anonymous` createLink with invite API (`requireSignIn: true`); partner auto-discovers file via `sharedWithMe`
 - [ ] Monthly data scope — currently filters to current month only on load
 - [ ] **Pareja — quién pagó:** registrar qué persona pagó cada gasto (útil tanto para parejas como para usuarios individuales que quieran rastrear el pagador)
 - [ ] **Separar JS del HTML:** extraer el `<script>` a un archivo `app.js` independiente para mejorar mantenibilidad
@@ -164,6 +164,7 @@ No npm, no build step. The test suite is a standalone HTML file that imports `ut
 - `buildMonthlySummary` — structured monthly breakdown (totals, per-category spent, remaining)
 - `filterCategories` — case-insensitive partial name filter for category lists
 - `isTokenExpired` — checks token expiry timestamp against current time (testable with optional `nowMs`)
+- `findSharedExpenseFile` — finds a matching filename in a `sharedWithMe` item list, handling `remoteItem` wrapper for cross-account shares
 
 ---
 
@@ -210,7 +211,7 @@ For local dev, add `http://localhost:8080` as an additional redirect URI in the 
 ### V1 (current)
 - ✅ Multi-profile (Personal + Pareja)
 - ✅ PKCE auth with refresh tokens
-- ✅ Couple sharing via OneDrive sharing links
+- ✅ Couple sharing via invite API (no anonymous links)
 - ✅ Cursor hook: auto-update PROJECT.md on commit/push
 - ✅ Hooks & skills model-agnostic (Claude / Codex / Cursor) — `agent_message` only, behavior-described, no model syntax
 - Stable OneDrive sync
@@ -247,8 +248,8 @@ UI: mobile-first dark theme, DM Sans + DM Mono fonts
 Profiles:
 - Personal: single Microsoft account, saves to expenses.xlsx
 - Pareja: 2 separate Microsoft accounts sharing a file
-  - Owner: logs in normally, generates OneDrive sharing link via Graph createLink API
-  - Partner: logs in with own account, enters sharing link, accesses file via /shares/{encoded} endpoint
+  - Owner: logs in normally, invites partner by email via Graph invite API (requireSignIn: true)
+  - Partner: logs in with own account, app auto-discovers file via GET /me/drive/sharedWithMe
 - All localStorage keys are namespaced per profile (e.g. et_token_personal, et_token_couple)
 
 The full current code is in the attached index.html.
