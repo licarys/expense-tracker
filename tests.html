@@ -326,6 +326,27 @@ describe('formatAmount', () => {
   });
 });
 
+describe('shouldWriteHeader', () => {
+  it('returns true when sheet is empty (rowCount 0)', () => {
+    expect(shouldWriteHeader(0, [])).toBeTruthy();
+  });
+  it('returns true when rowCount is null (API returned no data)', () => {
+    expect(shouldWriteHeader(null, [])).toBeTruthy();
+  });
+  it('returns true when rowCount is undefined', () => {
+    expect(shouldWriteHeader(undefined, [])).toBeTruthy();
+  });
+  it('returns false when sheet has data and first row is Date', () => {
+    expect(shouldWriteHeader(5, ['Date', 'Description', 'Amount', 'Category'])).toBeFalsy();
+  });
+  it('returns false when sheet has data but no Date header (do not overwrite existing data)', () => {
+    expect(shouldWriteHeader(3, ['2024-01-01', 'Lunch', '18', 'food'])).toBeFalsy();
+  });
+  it('returns false when rowCount is 1 (header row already present)', () => {
+    expect(shouldWriteHeader(1, ['Date', 'Description', 'Amount', 'Category'])).toBeFalsy();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Render results
 // ---------------------------------------------------------------------------
