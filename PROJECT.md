@@ -125,7 +125,7 @@ One row per expense. Header row written on first use; older files get missing co
 - [ ] Monthly data scope — currently filters to current month only on load
 - [ ] **Pareja — quién pagó:** registrar qué persona pagó cada gasto (útil tanto para parejas como para usuarios individuales que quieran rastrear el pagador)
 - [ ] **Separar JS del HTML:** extraer el `<script>` a un archivo `app.js` independiente para mejorar mantenibilidad
-- [ ] **Búsqueda de categorías:** agregar un campo de búsqueda/filtro al selector de categorías, ya que la lista crece con categorías personalizadas
+- [x] **Búsqueda de categorías:** campo de búsqueda/filtro en Overview y en Settings → Monthly budgets; usa `filterCategories()` (pure function, tested)
 - [x] **Bug — fecha "Dec 1969":** Excel serial dates from Graph API were passed to `new Date()` as milliseconds; fixed with `parseExpenseDate()` in `loadExpensesFromSheet`
 - [x] **Conversión de monedas:** tasas manuales en Settings, totales convertidos en overview, columna F en Excel, migración automática de gastos viejos mal etiquetados como USD (ver Currency architecture)
 
@@ -162,6 +162,7 @@ No npm, no build step. The test suite is a standalone HTML file that imports `ut
 - `isValidExpenseDate` — date guard
 - `formatAmount` — Intl currency display
 - `buildMonthlySummary` — structured monthly breakdown (totals, per-category spent, remaining)
+- `filterCategories` — case-insensitive partial name filter for category lists
 
 ---
 
