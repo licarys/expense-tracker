@@ -134,12 +134,32 @@ One row per expense. Header row written on first use; older files get missing co
 
 ```
 expense-tracker/
-├── index.html          ← entire app (HTML + CSS + JS in one file)
+├── index.html          ← app shell + DOM-dependent JS (loads utils.js)
+├── utils.js            ← pure utility functions (parser, dates, currency, categories)
+├── tests.html          ← browser-based unit test suite (open at /tests.html)
 └── .cursor/
     ├── hooks.json      ← Cursor hook definitions
     └── hooks/
         └── update-plan.sh  ← fires after git commit/push to remind agent to update PROJECT.md
 ```
+
+---
+
+## Unit tests
+
+**Run:** open `http://localhost:8080/tests.html` in any browser.
+
+No npm, no build step. The test suite is a standalone HTML file that imports `utils.js` directly and runs a zero-dependency in-browser test runner.
+
+**Covered functions (`utils.js`):**
+- `detectCurrency` — symbol + ISO code detection
+- `parseExpense` — amount, currency, category, description extraction
+- `convertToUSD` — exchange rate conversion
+- `getExpenseAmountUSD` — resolved USD value for an expense object
+- `parseExpenseDate` — YYYY-MM-DD, ISO datetime, Excel serial number, Date object
+- `formatExpenseDateStorage` — date → storage string
+- `isValidExpenseDate` — date guard
+- `formatAmount` — Intl currency display
 
 ---
 

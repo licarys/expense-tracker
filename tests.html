@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expense Tracker — Unit Tests</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', system-ui, sans-serif; background: #0f1117; color: #e2e8f0; padding: 24px; }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; color: #f8fafc; }
+    .subtitle { font-size: 0.85rem; color: #64748b; margin-bottom: 24px; }
+    .suite { margin-bottom: 28px; }
+    .suite-title {
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: #94a3b8; margin-bottom: 10px;
+      padding-bottom: 6px; border-bottom: 1px solid #1e293b;
+    }
+    .test { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; font-size: 0.875rem; }
+    .badge {
+      flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700;
+    }
+    .pass { background: #16a34a; color: #fff; }
+    .fail { background: #dc2626; color: #fff; }
+    .label { flex: 1; }
+    .error { font-size: 0.8rem; color: #f87171; margin-top: 2px; font-family: monospace; }
+    .summary {
+      position: sticky; top: 0; background: #0f1117; padding: 12px 0 16px;
+      border-bottom: 1px solid #1e293b; margin-bottom: 24px;
+      display: flex; gap: 20px; align-items: center;
+    }
+    .stat { font-size: 0.875rem; }
+    .stat span { font-weight: 700; }
+    .stat.green span { color: #4ade80; }
+    .stat.red   span { color: #f87171; }
+  </style>
+</head>
+<body>
+  <h1>Unit Tests</h1>
+  <p class="subtitle">Open this page at <code>http://localhost:8080/tests.html</code></p>
+  <div id="summary" class="summary"></div>
+  <div id="results"></div>
+
+<script src="utils.js"></script>
+<script>
+// ---------------------------------------------------------------------------
+// Minimal test runner
+// ---------------------------------------------------------------------------
+const suites = [];
+let _current = null;
+
+function describe(name, fn) {
+  _current = { name, tests: [] };
+  suites.push(_current);
+  fn();
+  _current = null;
+}
+
+function it(label, fn) {
+  try {
+    fn();
+    _current.tests.push({ label, ok: true });
+  } catch (e) {
+    _current.tests.push({ label, ok: false, error: e.message || String(e) });
+  }
+}
+
+function expect(actual) {
+  return {
+    toBe(expected) {
+      if (actual !== expected)
+        throw new Error(`Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+    },
+    toEqual(expected) {
+      const a = JSON.stringify(actual), b = JSON.stringify(expected);
+      if (a !== b) throw new Error(`Expected ${b}, got ${a}`);
+    },
+    toBeNull() {
+      if (actual !== null)
+        throw new Error(`Expected null, got ${JSON.stringify(actual)}`);
+    },
+    toBeTruthy() {
+      if (!actual) throw new Error(`Expected truthy, got ${JSON.stringify(actual)}`);
+    },
+    toBeFalsy() {
+      if (actual) throw new Error(`Expected falsy, got ${JSON.stringify(actual)}`);
+    },
+    toBeCloseTo(expected, decimals = 2) {
+      const factor = Math.pow(10, decimals);
+      if (Math.round(actual * factor) !== Math.round(expected * factor))
+        throw new Error(`Expected ~${expected}, got ${actual}`);
+    },
+    toContain(str) {
+      if (!String(actual).includes(str))
+        throw new Error(`Expected "${actual}" to contain "${str}"`);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Test suites
+// ---------------------------------------------------------------------------
+
+describe('detectCurrency', () => {
+  it('returns null for plain text with no currency', () => {
+    expect(detectCurrency('lunch with Ana')).toBeNull();
+  });
+  it('detects C$ as NIO', () => {
+    expect(detectCurrency('Almuerzo C$150')).toBe('NIO');
+  });
+  it('detects $ alone as null (not a symbol in the map)', () => {
+    expect(detectCurrency('Lunch $18 food')).toBeNull();
+  });
+  it('detects € as EUR', () => {
+    expect(detectCurrency('Coffee €4.5')).toBe('EUR');
+  });
+  it('detects ISO code NIO', () => {
+    expect(detectCurrency('Taxi 200 NIO')).toBe('NIO');
+  });
+  it('detects ISO code MXN', () => {
+    expect(detectCurrency('Comida 150 MXN')).toBe('MXN');
+  });
+  it('detects R$ as BRL', () => {
+    expect(detectCurrency('Uber R$35')).toBe('BRL');
+  });
+  it('detects S/ as PEN', () => {
+    expect(detectCurrency('Taxi S/15')).toBe('PEN');
+  });
+  it('is case-insensitive for ISO codes', () => {
+    expect(detectCurrency('Comida 150 mxn')).toBe('MXN');
+  });
+  it('detects £ as GBP', () => {
+    expect(detectCurrency('Bus £2.50')).toBe('GBP');
+  });
+});
+
+describe('parseExpense — amount & currency', () => {
+  it('parses a plain USD amount', () => {
+    const e = parseExpense('Lunch with Ana $18 food');
+    expect(e.amount).toBe(18);
+    expect(e.currency).toBe('USD');
+  });
+  it('parses integer amount', () => {
+    const e = parseExpense('Uber 25');
+    expect(e.amount).toBe(25);
+  });
+  it('parses decimal amount (dot)', () => {
+    const e = parseExpense('Coffee $4.50');
+    expect(e.amount).toBe(4.5);
+  });
+  it('parses decimal amount (comma)', () => {
+    const e = parseExpense('Taxi 12,50 EUR');
+    expect(e.amount).toBe(12.5);
+    expect(e.currency).toBe('EUR');
+  });
+  it('parses córdoba amount with C$ symbol', () => {
+    const e = parseExpense('Almuerzo C$150 food');
+    expect(e.amount).toBe(150);
+    expect(e.currency).toBe('NIO');
+  });
+  it('returns null when no number is found', () => {
+    expect(parseExpense('just some text')).toBeNull();
+  });
+  it('returns null for zero amount', () => {
+    expect(parseExpense('free item 0')).toBeNull();
+  });
+});
+
+describe('parseExpense — category detection', () => {
+  it('detects food from keyword "lunch"', () => {
+    expect(parseExpense('Lunch $12').category).toBe('food');
+  });
+  it('detects transport from keyword "uber"', () => {
+    expect(parseExpense('Uber $8').category).toBe('transport');
+  });
+  it('detects entertainment from keyword "netflix"', () => {
+    expect(parseExpense('Netflix $15').category).toBe('entertainment');
+  });
+  it('detects health from keyword "gym"', () => {
+    expect(parseExpense('Gym $30').category).toBe('health');
+  });
+  it('detects shopping from keyword "amazon"', () => {
+    expect(parseExpense('Amazon $45').category).toBe('shopping');
+  });
+  it('defaults to "other" when no keyword matches', () => {
+    expect(parseExpense('Random thing $10').category).toBe('other');
+  });
+  it('is case-insensitive for category keywords', () => {
+    expect(parseExpense('LUNCH $12').category).toBe('food');
+  });
+});
+
+describe('parseExpense — description', () => {
+  it('produces a non-empty description', () => {
+    const e = parseExpense('Lunch with Ana $18 food');
+    expect(e.description.length > 0).toBeTruthy();
+  });
+  it('falls back to full text when cleaned description is too short', () => {
+    const e = parseExpense('$5');
+    expect(e.description).toContain('$5');
+  });
+  it('includes a date in YYYY-MM-DD format', () => {
+    const e = parseExpense('Coffee $4');
+    expect(/^\d{4}-\d{2}-\d{2}$/.test(e.date)).toBeTruthy();
+  });
+});
+
+describe('convertToUSD', () => {
+  // Seed localStorage so convertToUSD can resolve NIO
+  localStorage.setItem('et_exchange_rates', JSON.stringify({ NIO: 36.5, MXN: 17.2 }));
+
+  it('returns amount unchanged for USD', () => {
+    expect(convertToUSD(100, 'USD')).toBe(100);
+  });
+  it('returns amount unchanged when currency is null', () => {
+    expect(convertToUSD(50, null)).toBe(50);
+  });
+  it('converts NIO to USD at correct rate', () => {
+    expect(convertToUSD(365, 'NIO')).toBeCloseTo(10, 2);
+  });
+  it('converts MXN to USD at correct rate', () => {
+    expect(convertToUSD(172, 'MXN')).toBeCloseTo(10, 2);
+  });
+  it('returns null for unknown currency', () => {
+    expect(convertToUSD(100, 'XYZ')).toBeNull();
+  });
+  it('returns null when rate is zero', () => {
+    localStorage.setItem('et_exchange_rates', JSON.stringify({ BAD: 0 }));
+    expect(convertToUSD(100, 'BAD')).toBeNull();
+    // Restore
+    localStorage.setItem('et_exchange_rates', JSON.stringify({ NIO: 36.5, MXN: 17.2 }));
+  });
+});
+
+describe('getExpenseAmountUSD', () => {
+  localStorage.setItem('et_exchange_rates', JSON.stringify({ NIO: 36.5 }));
+
+  it('returns amount for a USD expense', () => {
+    expect(getExpenseAmountUSD({ amount: 20, currency: 'USD' })).toBe(20);
+  });
+  it('converts NIO expense to USD', () => {
+    expect(getExpenseAmountUSD({ amount: 365, currency: 'NIO' })).toBeCloseTo(10, 2);
+  });
+  it('returns 0 when currency is unknown and not USD', () => {
+    expect(getExpenseAmountUSD({ amount: 100, currency: 'XYZ' })).toBe(0);
+  });
+  it('defaults to USD when currency field is missing', () => {
+    expect(getExpenseAmountUSD({ amount: 30 })).toBe(30);
+  });
+});
+
+describe('parseExpenseDate', () => {
+  it('parses YYYY-MM-DD string', () => {
+    const d = parseExpenseDate('2024-06-15');
+    expect(d.getFullYear()).toBe(2024);
+    expect(d.getMonth()).toBe(5);   // June = index 5
+    expect(d.getDate()).toBe(15);
+  });
+  it('parses ISO datetime string', () => {
+    const d = parseExpenseDate('2024-01-20T10:30:00Z');
+    expect(d.getFullYear()).toBe(2024);
+    expect(d.getMonth()).toBe(0);
+  });
+  it('returns null for empty string', () => {
+    expect(parseExpenseDate('')).toBeNull();
+  });
+  it('returns null for null', () => {
+    expect(parseExpenseDate(null)).toBeNull();
+  });
+  it('returns null for a small number (not a serial)', () => {
+    expect(parseExpenseDate(999)).toBeNull();
+  });
+  it('parses Excel serial number (e.g. 45399 = 2024-03-29)', () => {
+    const d = parseExpenseDate(45399);
+    expect(d).toBeTruthy();
+    expect(d.getFullYear()).toBe(2024);
+  });
+  it('returns null for invalid date string', () => {
+    expect(parseExpenseDate('not-a-date')).toBeNull();
+  });
+  it('handles a Date object directly', () => {
+    const src = new Date(2023, 11, 25, 12, 0, 0);
+    const d = parseExpenseDate(src);
+    expect(d.getFullYear()).toBe(2023);
+    expect(d.getMonth()).toBe(11);
+    expect(d.getDate()).toBe(25);
+  });
+});
+
+describe('formatExpenseDateStorage', () => {
+  it('formats date as YYYY-MM-DD', () => {
+    const d = new Date(2024, 5, 3); // June 3, 2024 (local)
+    expect(formatExpenseDateStorage(d)).toBe('2024-06-03');
+  });
+  it('zero-pads month and day', () => {
+    const d = new Date(2024, 0, 9); // Jan 9
+    expect(formatExpenseDateStorage(d)).toBe('2024-01-09');
+  });
+});
+
+describe('isValidExpenseDate', () => {
+  it('returns true for a valid recent date', () => {
+    expect(isValidExpenseDate(new Date(2024, 5, 15))).toBeTruthy();
+  });
+  it('returns false for an invalid Date object', () => {
+    expect(isValidExpenseDate(new Date('invalid'))).toBeFalsy();
+  });
+  it('returns false for a year before 1972', () => {
+    expect(isValidExpenseDate(new Date(1960, 0, 1))).toBeFalsy();
+  });
+  it('returns false for a non-Date value', () => {
+    expect(isValidExpenseDate('2024-06-15')).toBeFalsy();
+  });
+});
+
+describe('formatAmount', () => {
+  it('formats USD amount', () => {
+    expect(formatAmount(18, 'USD')).toContain('18');
+    expect(formatAmount(18, 'USD')).toContain('$');
+  });
+  it('formats EUR amount', () => {
+    expect(formatAmount(10, 'EUR')).toContain('10');
+  });
+  it('falls back gracefully for invalid currency code', () => {
+    expect(formatAmount(5, 'INVALID')).toContain('5');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Render results
+// ---------------------------------------------------------------------------
+(function renderResults() {
+  const container = document.getElementById('results');
+  let totalPass = 0, totalFail = 0;
+
+  suites.forEach(suite => {
+    const div = document.createElement('div');
+    div.className = 'suite';
+
+    const title = document.createElement('div');
+    title.className = 'suite-title';
+    title.textContent = suite.name;
+    div.appendChild(title);
+
+    suite.tests.forEach(t => {
+      if (t.ok) totalPass++; else totalFail++;
+
+      const row = document.createElement('div');
+      row.className = 'test';
+
+      const badge = document.createElement('div');
+      badge.className = 'badge ' + (t.ok ? 'pass' : 'fail');
+      badge.textContent = t.ok ? '✓' : '✗';
+
+      const labelWrap = document.createElement('div');
+      labelWrap.className = 'label';
+      labelWrap.textContent = t.label;
+
+      if (!t.ok && t.error) {
+        const err = document.createElement('div');
+        err.className = 'error';
+        err.textContent = t.error;
+        labelWrap.appendChild(err);
+      }
+
+      row.appendChild(badge);
+      row.appendChild(labelWrap);
+      div.appendChild(row);
+    });
+
+    container.appendChild(div);
+  });
+
+  const total = totalPass + totalFail;
+  document.getElementById('summary').innerHTML =
+    `<div class="stat green"><span>${totalPass}</span> passed</div>` +
+    (totalFail > 0 ? `<div class="stat red"><span>${totalFail}</span> failed</div>` : '') +
+    `<div class="stat" style="color:#64748b"><span>${total}</span> total</div>`;
+
+  document.title = `Tests (${totalPass}/${total}) — Expense Tracker`;
+})();
+</script>
+</body>
+</html>
