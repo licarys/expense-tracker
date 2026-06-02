@@ -347,6 +347,33 @@ describe('shouldWriteHeader', () => {
   });
 });
 
+describe('isTokenExpired', () => {
+  it('returns false when expiryMs is 0', () => {
+    expect(isTokenExpired(0, 1_000_000)).toBeFalsy();
+  });
+  it('returns false when expiryMs is null', () => {
+    expect(isTokenExpired(null, 1_000_000)).toBeFalsy();
+  });
+  it('returns false when expiryMs is undefined', () => {
+    expect(isTokenExpired(undefined, 1_000_000)).toBeFalsy();
+  });
+  it('returns true when now > expiryMs (token expired)', () => {
+    expect(isTokenExpired(1000, 2000)).toBeTruthy();
+  });
+  it('returns false when now < expiryMs (token still valid)', () => {
+    expect(isTokenExpired(2000, 1000)).toBeFalsy();
+  });
+  it('returns true when now === expiryMs (boundary — treat as expired)', () => {
+    expect(isTokenExpired(1000, 1000)).toBeTruthy();
+  });
+  it('falls back to real Date.now() — very old expiry is expired', () => {
+    expect(isTokenExpired(1000)).toBeTruthy();
+  });
+  it('falls back to real Date.now() — far-future expiry is valid', () => {
+    expect(isTokenExpired(9_999_999_999_999)).toBeFalsy();
+  });
+});
+
 describe('filterCategories', () => {
   const cats = [
     { key: 'food',          name: 'Food',          emoji: '🥗' },

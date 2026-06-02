@@ -866,16 +866,15 @@ async function syncAmountUsdColumnToExcel() {
   try {
     const wbBase = await getWorkbookBase();
     if (!wbBase) return;
-    const authHeader = { 'Authorization': 'Bearer ' + accessToken };
-    const rangeRes = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`, { headers: authHeader });
-    if (!rangeRes.ok) return;
+    const rangeRes = await apiFetch(`${wbBase}/worksheets/Sheet1/usedRange`);
+    if (!rangeRes || !rangeRes.ok) return;
     const rows = (await rangeRes.json()).values || [];
     const patchPromises = [];
     if (rows.length > 0 && rows[0][0] === 'Date' && rows[0][5] !== CONVERTED_USD_COLUMN_HEADER) {
       patchPromises.push(
-        fetch(`${wbBase}/worksheets/Sheet1/range(address='F1:F1')`, {
+        apiFetch(`${wbBase}/worksheets/Sheet1/range(address='F1:F1')`, {
           method: 'PATCH',
-          headers: { ...authHeader, 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ values: [[CONVERTED_USD_COLUMN_HEADER]] })
         })
       );
@@ -890,9 +889,9 @@ async function syncAmountUsdColumnToExcel() {
       if (amountUsd == null) return;
       const excelRow = idx + 1;
       patchPromises.push(
-        fetch(`${wbBase}/worksheets/Sheet1/range(address='F${excelRow}:F${excelRow}')`, {
+        apiFetch(`${wbBase}/worksheets/Sheet1/range(address='F${excelRow}:F${excelRow}')`, {
           method: 'PATCH',
-          headers: { ...authHeader, 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ values: [[amountUsd]] })
         })
       );
@@ -959,9 +958,8 @@ async function migrateMislabeledExpensesOnLoad() {
   if (accessToken) {
     try {
       const wbBase = await getWorkbookBase();
-      const authHeader = { 'Authorization': 'Bearer ' + accessToken };
-      const rangeRes = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`, { headers: authHeader });
-      if (rangeRes.ok) {
+      const rangeRes = await apiFetch(`${wbBase}/worksheets/Sheet1/usedRange`);
+      if (rangeRes && rangeRes.ok) {
         const rows = (await rangeRes.json()).values || [];
         const patchPromises = [];
 
@@ -972,9 +970,9 @@ async function migrateMislabeledExpensesOnLoad() {
           if (rowIdx < 0) return;
           const excelRow = rowIdx + 1;
           patchPromises.push(
-            fetch(`${wbBase}/worksheets/Sheet1/range(address='E${excelRow}:F${excelRow}')`, {
+            apiFetch(`${wbBase}/worksheets/Sheet1/range(address='E${excelRow}:F${excelRow}')`, {
               method: 'PATCH',
-              headers: { ...authHeader, 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ values: [[exp.currency, exp.amountUsd]] })
             })
           );
@@ -999,9 +997,9 @@ async function migrateMislabeledExpensesOnLoad() {
           const range = patchE ? `E${excelRow}:F${excelRow}` : `F${excelRow}:F${excelRow}`;
           const values = patchE ? [[currency, amountUsd]] : [[amountUsd]];
           patchPromises.push(
-            fetch(`${wbBase}/worksheets/Sheet1/range(address='${range}')`, {
+            apiFetch(`${wbBase}/worksheets/Sheet1/range(address='${range}')`, {
               method: 'PATCH',
-              headers: { ...authHeader, 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ values })
             })
           );
@@ -1186,28 +1184,29 @@ async function generateSharingLink() {
   try {
     const defaultFile = PROFILES.couple.defaultFile;
     const filename = document.getElementById('setting-filename').value || defaultFile;
-    const headers = { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' };
 
     // Ensure file exists first
-    const check = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`, { headers });
+    const check = await apiFetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`);
     let itemId;
-    if (check.ok) {
+    if (check && check.ok) {
       itemId = (await check.json()).id;
     } else {
-      await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/content`, {
+      await apiFetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/content`, {
         method: 'PUT',
-        headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+        headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
         body: new Blob([''], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       });
-      const newFile = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`, { headers });
-      itemId = (await newFile.json()).id;
+      const newFile = await apiFetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`);
+      itemId = newFile ? (await newFile.json()).id : null;
     }
+    if (!itemId) { btn.textContent = 'Error — retry'; btn.disabled = false; return; }
 
-    const linkRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${itemId}/createLink`, {
+    const linkRes = await apiFetch(`https://graph.microsoft.com/v1.0/me/drive/items/${itemId}/createLink`, {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'edit', scope: 'anonymous' }),
     });
+    if (!linkRes) { btn.textContent = 'Error — retry'; btn.disabled = false; return; }
     const linkData = await linkRes.json();
     _currentShareLink = linkData.link?.webUrl;
 
@@ -1240,10 +1239,8 @@ function copyShareLink() {
 async function resolveSharedFile(shareUrl) {
   try {
     const encoded = 'u!' + btoa(shareUrl).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-    const res = await fetch(`https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`, {
-      headers: { 'Authorization': 'Bearer ' + accessToken }
-    });
-    if (!res.ok) return null;
+    const res = await apiFetch(`https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`);
+    if (!res || !res.ok) return null;
     const item = await res.json();
     return { driveId: item.parentReference.driveId, itemId: item.id };
   } catch(e) {
@@ -1534,6 +1531,59 @@ async function _refreshAccessToken() {
   return false;
 }
 
+// ── 401 / session expiry handling ────────────────────────────────────────────
+
+/**
+ * Called when a Graph API request returns 401 even after a refresh attempt.
+ * Clears all stored tokens and shows the auth screen with a session-expired message.
+ * Guards against being called multiple times concurrently (checks accessToken).
+ */
+function handleAuthExpired() {
+  if (!accessToken) return; // already handled by a concurrent call
+  accessToken = null;
+  localStorage.removeItem(sk('et_token'));
+  localStorage.removeItem(sk('et_token_expiry'));
+  localStorage.removeItem(sk('et_refresh_token'));
+
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+  const sub = document.getElementById('auth-profile-sub');
+  if (sub) sub.innerHTML = 'Your session expired.<br>Please sign in again to continue.';
+}
+
+/**
+ * Drop-in replacement for fetch() for all Microsoft Graph API calls.
+ * Automatically injects the current Bearer token; on 401 attempts one silent
+ * refresh before falling back to handleAuthExpired().
+ *
+ * @param {string} url
+ * @param {RequestInit} [options] - any fetch options EXCEPT Authorization header
+ * @returns {Promise<Response|null>} null when auth expired and recovery failed
+ */
+async function apiFetch(url, options = {}) {
+  const buildOpts = () => ({
+    ...options,
+    headers: { ...options.headers, 'Authorization': 'Bearer ' + accessToken },
+  });
+
+  let res = await fetch(url, buildOpts());
+
+  if (res.status === 401) {
+    const refreshed = await _refreshAccessToken();
+    if (refreshed) {
+      res = await fetch(url, buildOpts()); // buildOpts() re-reads the updated accessToken
+    }
+    if (!refreshed || res.status === 401) {
+      handleAuthExpired();
+      return null;
+    }
+  }
+
+  return res;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function handleAuth() {
   const params = new URLSearchParams(window.location.search);
   const code = params.get('code');
@@ -1556,7 +1606,7 @@ async function handleAuth() {
   const stored = localStorage.getItem(sk('et_token'));
   const expiry = parseInt(localStorage.getItem(sk('et_token_expiry')) || '0');
   if (stored) {
-    if (expiry && Date.now() > expiry) {
+    if (isTokenExpired(expiry)) {
       const refreshed = await _refreshAccessToken();
       if (refreshed) { showApp(); return; }
       localStorage.removeItem(sk('et_token'));
@@ -1878,19 +1928,15 @@ async function openInOneDrive() {
   try {
     let webUrl;
     if (coupleRole === 'partner' && sharedFileHandle) {
-      const res = await fetch(
-        `https://graph.microsoft.com/v1.0/drives/${sharedFileHandle.driveId}/items/${sharedFileHandle.itemId}`,
-        { headers: { 'Authorization': 'Bearer ' + accessToken } }
+      const res = await apiFetch(
+        `https://graph.microsoft.com/v1.0/drives/${sharedFileHandle.driveId}/items/${sharedFileHandle.itemId}`
       );
-      if (res.ok) webUrl = (await res.json()).webUrl;
+      if (res && res.ok) webUrl = (await res.json()).webUrl;
     } else {
       const defaultFile = (PROFILES[currentProfile] || PROFILES.personal).defaultFile;
       const filename = document.getElementById('setting-filename').value || defaultFile;
-      const res = await fetch(
-        `https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`,
-        { headers: { 'Authorization': 'Bearer ' + accessToken } }
-      );
-      if (res.ok) webUrl = (await res.json()).webUrl;
+      const res = await apiFetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`);
+      if (res && res.ok) webUrl = (await res.json()).webUrl;
     }
     if (webUrl) {
       window.open(webUrl, '_blank');
@@ -1919,21 +1965,20 @@ function base64ToBlob(b64, mime) {
 async function saveExpenseToSheet(expense) {
   if (!accessToken) return false;
   try {
-    const authHeader = { 'Authorization': 'Bearer ' + accessToken };
-
     // For owner/personal: ensure a valid xlsx file exists before writing
     if (coupleRole !== 'partner') {
       const defaultFile = (PROFILES[currentProfile] || PROFILES.personal).defaultFile;
       const filename = document.getElementById('setting-filename').value || defaultFile;
-      const check = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`, { headers: authHeader });
+      const check = await apiFetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}`);
+      if (!check) return false;
       if (!check.ok) {
         const xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-        const createRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/content`, {
+        const createRes = await apiFetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${filename}:/content`, {
           method: 'PUT',
-          headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': xlsxMime },
+          headers: { 'Content-Type': xlsxMime },
           body: base64ToBlob(EMPTY_XLSX_B64, xlsxMime)
         });
-        if (!createRes.ok) { console.error('File create failed', await createRes.text()); return false; }
+        if (!createRes || !createRes.ok) { console.error('File create failed'); return false; }
       }
     }
 
@@ -1943,7 +1988,8 @@ async function saveExpenseToSheet(expense) {
     const cat = CATEGORIES.find(c => c.key === expense.category) || CATEGORIES[5];
     const dateStr = formatExpenseDateStorage(parseExpenseDate(expense.date) || new Date());
 
-    const rangeRes = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`, { headers: authHeader });
+    const rangeRes = await apiFetch(`${wbBase}/worksheets/Sheet1/usedRange`);
+    if (!rangeRes) return false;
     let nextRow = 2;
     let existingFirstRow = [];
     let rowCount = 0;
@@ -1956,12 +2002,12 @@ async function saveExpenseToSheet(expense) {
 
     if (shouldWriteHeader(rowCount, existingFirstRow)) {
       // Sheet is empty — write all headers before the first expense row
-      const hRes = await fetch(`${wbBase}/worksheets/Sheet1/range(address='A1:F1')`, {
+      const hRes = await apiFetch(`${wbBase}/worksheets/Sheet1/range(address='A1:F1')`, {
         method: 'PATCH',
-        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: [['Date', 'Description', 'Amount', 'Category', 'Currency', CONVERTED_USD_COLUMN_HEADER]] })
       });
-      if (!hRes.ok) { console.error('Header write failed', await hRes.text()); return false; }
+      if (!hRes || !hRes.ok) { console.error('Header write failed'); return false; }
       nextRow = 2;
     } else {
       // Sheet already has data — never overwrite row 1
@@ -1969,16 +2015,16 @@ async function saveExpenseToSheet(expense) {
       // Silently patch any missing or outdated column headers for older files
       if (existingFirstRow[0] === 'Date') {
         if (existingFirstRow[4] !== 'Currency') {
-          await fetch(`${wbBase}/worksheets/Sheet1/range(address='E1:E1')`, {
+          apiFetch(`${wbBase}/worksheets/Sheet1/range(address='E1:E1')`, {
             method: 'PATCH',
-            headers: { ...authHeader, 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ values: [['Currency']] })
           }).catch(() => {});
         }
         if (existingFirstRow[5] !== CONVERTED_USD_COLUMN_HEADER) {
-          await fetch(`${wbBase}/worksheets/Sheet1/range(address='F1:F1')`, {
+          apiFetch(`${wbBase}/worksheets/Sheet1/range(address='F1:F1')`, {
             method: 'PATCH',
-            headers: { ...authHeader, 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ values: [[CONVERTED_USD_COLUMN_HEADER]] })
           }).catch(() => {});
         }
@@ -1987,14 +2033,15 @@ async function saveExpenseToSheet(expense) {
 
     const expCurrency = expense.currency || BASE_CURRENCY;
     const convertedAmount = convertToUSD(expense.amount, expCurrency) ?? expense.amountUsd ?? expense.amount;
-    const updateRes = await fetch(
+    const updateRes = await apiFetch(
       `${wbBase}/worksheets/Sheet1/range(address='A${nextRow}:F${nextRow}')`,
       {
         method: 'PATCH',
-        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: [[dateStr, expense.description, expense.amount, cat.name, expCurrency, convertedAmount]] })
       }
     );
+    if (!updateRes) return false;
     if (!updateRes.ok) console.error('Row write failed', await updateRes.text());
     return updateRes.ok;
   } catch (e) {
@@ -2019,10 +2066,9 @@ async function loadCategoriesFromSheet() {
   try {
     const wbBase = await getWorkbookBase();
     if (!wbBase) return false;
-    const authHeader = { 'Authorization': 'Bearer ' + accessToken };
 
-    const res = await fetch(`${wbBase}/worksheets/Categories/usedRange`, { headers: authHeader });
-    if (!res.ok) return false; // Sheet doesn't exist yet
+    const res = await apiFetch(`${wbBase}/worksheets/Categories/usedRange`);
+    if (!res || !res.ok) return false; // Sheet doesn't exist yet or auth expired
 
     const data = await res.json();
     const rows = (data.values || []).slice(1); // Skip header row
@@ -2070,18 +2116,18 @@ async function saveCategoriesToSheet() {
   try {
     const wbBase = await getWorkbookBase();
     if (!wbBase) return;
-    const authHeader = { 'Authorization': 'Bearer ' + accessToken };
 
     // Create the Categories sheet only if it doesn't exist yet — never delete it.
-    const sheetCheck = await fetch(`${wbBase}/worksheets/Categories`, { headers: authHeader });
+    const sheetCheck = await apiFetch(`${wbBase}/worksheets/Categories`);
+    if (!sheetCheck) return;
     if (!sheetCheck.ok) {
-      const createRes = await fetch(`${wbBase}/worksheets/add`, {
+      const createRes = await apiFetch(`${wbBase}/worksheets/add`, {
         method: 'POST',
-        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'Categories' })
       });
-      if (!createRes.ok) {
-        console.error('Could not create Categories sheet:', await createRes.text());
+      if (!createRes || !createRes.ok) {
+        console.error('Could not create Categories sheet');
         return;
       }
     }
@@ -2106,12 +2152,12 @@ async function saveCategoriesToSheet() {
     while (formulas.length < totalRows) formulas.push(['', '', '', '', '']);
 
     const range = `A1:E${totalRows}`;
-    const patchRes = await fetch(`${wbBase}/worksheets/Categories/range(address='${range}')`, {
+    const patchRes = await apiFetch(`${wbBase}/worksheets/Categories/range(address='${range}')`, {
       method: 'PATCH',
-      headers: { ...authHeader, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ formulas })
     });
-    if (!patchRes.ok) {
+    if (patchRes && !patchRes.ok) {
       console.error('Categories sheet write failed:', await patchRes.text());
     }
   } catch(e) {
@@ -2132,9 +2178,8 @@ async function loadExpensesFromSheet() {
     await loadCategoriesFromSheet();
     renderCatSettings();
 
-    const res = await fetch(`${wbBase}/worksheets/Sheet1/usedRange`,
-      { headers: { 'Authorization': 'Bearer ' + accessToken } }
-    );
+    const res = await apiFetch(`${wbBase}/worksheets/Sheet1/usedRange`);
+    if (!res) return; // auth expired — handleAuthExpired() already called
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       const code = errData?.error?.code || '';

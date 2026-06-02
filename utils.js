@@ -252,6 +252,22 @@ function parseExpense(text) {
 }
 
 // ---------------------------------------------------------------------------
+// Token expiry check
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when the stored token expiry timestamp has passed.
+ * Pure function — accepts an optional nowMs for deterministic testing.
+ *
+ * @param {number|null|undefined} expiryMs - expiry epoch in ms (0/null/undefined → not expired)
+ * @param {number} [nowMs]                 - current epoch in ms (defaults to Date.now())
+ */
+function isTokenExpired(expiryMs, nowMs) {
+  if (!expiryMs) return false;
+  return (nowMs !== undefined ? nowMs : Date.now()) >= expiryMs;
+}
+
+// ---------------------------------------------------------------------------
 // Category filter
 // ---------------------------------------------------------------------------
 
