@@ -84,11 +84,33 @@ All budgets are configurable in the settings panel and saved to localStorage.
 
 Sheet: `Sheet1`
 
-| Column A | Column B | Column C | Column D |
-|---|---|---|---|
-| Date | Description | Amount | Category |
+| Column A | Column B | Column C | Column D | Column E | Column F |
+|---|---|---|---|---|---|
+| Date | Description | Amount | Category | Currency | Amount (USD) |
 
-One row per expense. Header row written on first use.
+- **Amount (C):** Original amount in the currency used when logging (e.g. 500 in córdobas).
+- **Currency (E):** ISO code from input (`C$` → NIO, `MXN`, …) or `USD` when none detected.
+- **Amount (USD) (F):** Value converted to USD at save time. Use this column in Excel for sums (`=SUM(F:F)`). The app uses the same field for budgets and overview totals.
+
+One row per expense. Header row written on first use; older files get missing column headers patched on the next write.
+
+---
+
+## Currency architecture
+
+| Piece | Role |
+|---|---|
+| `BASE_CURRENCY` | Always `USD` — budgets, hero total, and category spent/remaining |
+| `detectCurrency(text)` | Parses symbols (`C$` → NIO, `€`, …) and ISO codes from chat input |
+| `convertToUSD(amount, from)` | Divides by manual rate when `from` ≠ USD |
+| `getExpenseAmountUSD(e)` | Uses stored `amountUsd` (column F) when present, else `convertToUSD` |
+| `getExchangeRates()` | `et_exchange_rates` — e.g. `{ NIO: 36.5 }` means 1 USD = 36.5 NIO |
+
+**Flow:** Log `Almuerzo C$150 food` → C=150, E=NIO, F≈4.11 USD (with rate 36.5). Overview sums column F values, not raw C when currency ≠ USD.
+
+**Exchange rates** in Settings apply to foreign currencies only; no “default currency” picker.
+
+**One-time fix (`migrateMislabeledExpensesOnLoad`):** Corrects mislabeled currency from description, backfills empty column F, updates Categories `SUMIF` to sum column F (flag `et_currency_fix_v3_{profile}`).
 
 ---
 
@@ -104,7 +126,7 @@ One row per expense. Header row written on first use.
 - [ ] **Separar JS del HTML:** extraer el `<script>` a un archivo `app.js` independiente para mejorar mantenibilidad
 - [ ] **Búsqueda de categorías:** agregar un campo de búsqueda/filtro al selector de categorías, ya que la lista crece con categorías personalizadas
 - [ ] **Bug — fecha "Dec 1969":** algunas fechas se parsean incorrectamente como epoch 0; investigar y corregir el manejo de fechas en `loadExpensesFromSheet`
-- [ ] **Conversión de monedas:** al ingresar un gasto en moneda distinta a la predeterminada, la app debe convertirlo automáticamente usando un tipo de cambio (API externa o manual) y mostrarlo en la moneda base del perfil para que los presupuestos y totales sean comparables
+- [x] **Conversión de monedas:** tasas manuales en Settings, totales convertidos en overview, columna F en Excel, migración automática de gastos viejos mal etiquetados como USD (ver Currency architecture)
 
 ---
 
