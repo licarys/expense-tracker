@@ -94,6 +94,10 @@ function expect(actual) {
       if (!String(actual).includes(str))
         throw new Error(`Expected "${actual}" to contain "${str}"`);
     },
+    toBeUndefined() {
+      if (actual !== undefined)
+        throw new Error(`Expected undefined, got ${JSON.stringify(actual)}`);
+    },
   };
 }
 
