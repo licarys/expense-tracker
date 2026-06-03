@@ -9,8 +9,9 @@ Mobile-first expense tracker that runs entirely in the browser. No backend, no b
 
 ## Tech constraints (non-negotiable)
 
-- Single `index.html` — keep everything in the app shell
-- Pure functions extracted to `utils.js` (no DOM access, no side effects)
+- `index.html` is the app shell (HTML + CSS only — no inline JS)
+- DOM logic, auth, and Graph API calls live in `js/app.js`
+- Pure functions extracted to `js/utils.js` (no DOM access, no side effects)
 - No npm, no framework, no build step
 - Must remain deployable as a static file on GitHub Pages
 - Do not change the dark mobile-first UI
@@ -20,9 +21,10 @@ Mobile-first expense tracker that runs entirely in the browser. No backend, no b
 
 | File | Role |
 |---|---|
-| `index.html` | App shell + DOM logic + auth + Graph API calls |
-| `utils.js` | Pure utility functions (parser, dates, currency, categories) |
-| `tests.html` | Browser-based unit test suite |
+| `index.html` | App shell: HTML + CSS only (loads `js/utils.js` then `js/app.js`) |
+| `js/app.js` | DOM logic + auth + Graph API calls |
+| `js/utils.js` | Pure utility functions (parser, dates, currency, categories) |
+| `tests.html` | Browser-based unit test suite (imports `js/utils.js`) |
 
 ## TDD — mandatory
 
@@ -53,7 +55,7 @@ Available helpers: `test`, `assertEqual`, `assertContains`, `assertTruthy`, `ass
 - [ ] Test written and was failing before implementation
 - [ ] Test passes now
 - [ ] No existing tests broken
-- [ ] `utils.js` functions remain pure
+- [ ] `js/utils.js` functions remain pure
 
 ## After every git commit or push
 

@@ -18,7 +18,7 @@ Designed to live as a home screen shortcut on your phone so logging an expense t
 
 | Layer | Choice | Reason |
 |---|---|---|
-| Frontend | Single `index.html` (HTML/CSS/JS) | No build step, works as a static file |
+| Frontend | `index.html` + `js/app.js` + `js/utils.js` | No build step, works as a static file |
 | Hosting | GitHub Pages | Free, permanent, no server needed |
 | Storage | Microsoft OneDrive via Excel | Already have a Microsoft 365 account |
 | Auth | Microsoft OAuth 2.0 — **PKCE flow** | Secure, no backend or client secret required |
@@ -126,7 +126,7 @@ One row per expense. Header row written on first use; older files get missing co
 - [x] Partner sharing link scope — replaced `anonymous` createLink with invite API (`requireSignIn: true`); partner auto-discovers file via `sharedWithMe`
 - [ ] Monthly data scope — currently filters to current month only on load
 - [x] **Pareja — quién pagó:** registrar qué persona pagó cada gasto — auto-detección desde el texto, picker "¿Quién pagó?" en el chat, tag en el historial, columna G en Excel, resumen por persona en `summary`
-- [ ] **Separar JS del HTML:** extraer el `<script>` a un archivo `app.js` independiente para mejorar mantenibilidad
+- [x] **Separar JS del HTML:** `<script>` extraído a `app.js` independiente; `index.html` contiene solo HTML + CSS
 - [x] **Búsqueda de categorías:** campo de búsqueda/filtro en Overview y en Settings → Monthly budgets; usa `filterCategories()` (pure function, tested)
 - [x] **Bug — fecha "Dec 1969":** Excel serial dates from Graph API were passed to `new Date()` as milliseconds; fixed with `parseExpenseDate()` in `loadExpensesFromSheet`
 - [x] **Conversión de monedas:** tasas manuales en Settings, totales convertidos en overview, columna F en Excel, migración automática de gastos viejos mal etiquetados como USD (ver Currency architecture)
@@ -137,9 +137,11 @@ One row per expense. Header row written on first use; older files get missing co
 
 ```
 expense-tracker/
-├── index.html          ← app shell + DOM-dependent JS (loads utils.js)
-├── utils.js            ← pure utility functions (parser, dates, currency, categories)
+├── index.html          ← app shell: HTML + CSS only (loads js/utils.js + js/app.js)
 ├── tests.html          ← browser-based unit test suite (open at /tests.html)
+├── js/
+│   ├── app.js          ← DOM logic, auth, Graph API calls
+│   └── utils.js        ← pure utility functions (parser, dates, currency, categories)
 └── .cursor/
     ├── hooks.json      ← Cursor hook definitions
     └── hooks/
