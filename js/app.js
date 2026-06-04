@@ -55,6 +55,7 @@ function jumpToLatestExpenseMonthIfNeeded() {
 
 function recalculateAllAmountUsd() {
   expenses.forEach(e => {
+    if (e.amountUsd != null) return; // preserve rate frozen at entry time
     const cur = e.currency || BASE_CURRENCY;
     const usd = convertToUSD(e.amount, cur);
     e.amountUsd = usd != null ? usd : (cur === BASE_CURRENCY ? e.amount : null);
@@ -679,6 +680,7 @@ function openSettings() {
     }
   }
   renderCatSettings();
+  renderExchangeRateRows();
   cancelAddCategory();
   const verEl = document.getElementById('app-version-label');
   if (verEl) verEl.textContent = APP_VERSION;
@@ -1554,7 +1556,9 @@ async function loadExpensesFromSheet() {
         : BASE_CURRENCY;
       const amount = parseFloat(r[2]) || 0;
       const paidBy = (r[6] && typeof r[6] === 'string' && r[6].trim()) ? r[6].trim() : null;
-      return { date: formatExpenseDateStorage(d), description: r[1] || '', amount, category: catObj.key, currency, amountUsd: null, paidBy };
+      const storedUsd = parseFloat(r[5]);
+      const amountUsd = isNaN(storedUsd) ? null : storedUsd;
+      return { date: formatExpenseDateStorage(d), description: r[1] || '', amount, category: catObj.key, currency, amountUsd, paidBy };
     }).filter(Boolean);
 
     recalculateAllAmountUsd();
@@ -1569,6 +1573,7 @@ async function loadExpensesFromSheet() {
 
     renderOverview();
     renderLog();
+    renderExchangeRateRows();
 
     // Persist categories with updated Spent/Left to the sheet.
     // Awaited so the sync status updates only after the write completes.
