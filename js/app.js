@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.0.1';
+const APP_VERSION = 'v1.0.2';
 
 const CLIENT_ID = '96029ed9-a4f6-4eed-97e8-a5f1e2e58adc';
 const SCOPES = 'Files.ReadWrite offline_access';

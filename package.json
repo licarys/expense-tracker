@@ -1,6 +1,6 @@
 {
   "name": "expense-tracker",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Mobile-first expense tracker — static, no build step",
   "private": true
 }
