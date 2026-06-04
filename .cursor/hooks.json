@@ -6,6 +6,12 @@
         "command": ".cursor/hooks/update-plan.sh",
         "matcher": "git (commit|push)"
       }
+    ],
+    "postToolUse": [
+      {
+        "command": ".cursor/hooks/check-js.sh",
+        "matcher": "Write"
+      }
     ]
   }
 }
