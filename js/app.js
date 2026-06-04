@@ -1,3 +1,5 @@
+const APP_VERSION = 'v1.0.0';
+
 const CLIENT_ID = '96029ed9-a4f6-4eed-97e8-a5f1e2e58adc';
 const SCOPES = 'Files.ReadWrite offline_access';
 const REDIRECT_URI = window.location.origin + window.location.pathname;
@@ -678,6 +680,8 @@ function openSettings() {
   }
   renderCatSettings();
   cancelAddCategory();
+  const verEl = document.getElementById('app-version-label');
+  if (verEl) verEl.textContent = APP_VERSION;
   document.getElementById('settings-modal').classList.add('open');
 }
 

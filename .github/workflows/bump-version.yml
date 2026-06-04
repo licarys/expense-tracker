@@ -1,0 +1,43 @@
+name: Bump version on deploy
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - 'package.json'   # avoid infinite loop when the action itself commits
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Use a token with write access so the commit triggers Pages deploy
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump patch version
+        id: ver
+        run: |
+          npm version patch --no-git-tag-version
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Inject version into app.js and index.html
+        run: |
+          VERSION=${{ steps.ver.outputs.version }}
+          # Update APP_VERSION constant
+          sed -i "s/const APP_VERSION = '[^']*'/const APP_VERSION = 'v${VERSION}'/" js/app.js
+          # Update cache-busting query params on script tags
+          sed -i "s/js\/utils\.js?v=[^\"']*/js\/utils.js?v=${VERSION}/" index.html
+          sed -i "s/js\/app\.js?v=[^\"']*/js\/app.js?v=${VERSION}/" index.html
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json js/app.js index.html
+          git commit -m "chore: bump version to v${{ steps.ver.outputs.version }} [skip ci]"
+          git push
